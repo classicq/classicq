@@ -337,10 +337,10 @@ const char *Sys_GetUserDataPath(void)
 		{
 			if (getpwuid_r(getuid(), &pwd, buf, bufsize, &pwd2) == 0)
 			{
-				ret = malloc(strlen(pwd2->pw_dir) + strlen("/.fodquake") + 1);
+				ret = malloc(strlen(pwd2->pw_dir) + strlen("/.classicq") + 1);
 				if (ret)
 				{
-					sprintf(ret, "%s/.fodquake", pwd2->pw_dir);
+					sprintf(ret, "%s/.classicq", pwd2->pw_dir);
 				}
 			}
 

@@ -32,7 +32,10 @@ m*_t structures are in-memory
 
 */
 
-#define NODENUM_TO_NODE(__model,__nodenum) ({ model_t *_model = (__model); unsigned int _nodenum = (__nodenum); mnode_t *node; if (_nodenum >= _model->numnodes) { node = (mnode_t *)(_model->leafs + (_nodenum - _model->numnodes)); } else { node = _model->nodes + _nodenum; } node; })
+#define NODENUM_TO_NODE(model, nodenum) \
+	((nodenum) >= (model)->numnodes \
+		? (mnode_t *)((model)->leafs + ((nodenum) - (model)->numnodes)) \
+		: (model)->nodes + (nodenum))
 
 // entity effects
 

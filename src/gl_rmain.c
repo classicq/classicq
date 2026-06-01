@@ -32,6 +32,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gl_warp.h"
 #include "gl_rsurf.h"
 #include "gl_shader.h"
+#include "gl_post_process.h"
+#include "gl_framebuffer.h"
 #include "gl_skinimp.h"
 #include "skin.h"
 #include "sound.h"
@@ -95,36 +97,36 @@ cvar_t	r_fastsky = {"r_fastsky", "0"};
 cvar_t	r_skycolor = {"r_skycolor", "4"};
 cvar_t	gl_colorlights		= {"gl_colorlights", "1"};
 
-cvar_t	r_farclip			= {"r_farclip", "4096"};
+cvar_t	r_farclip			= {"r_farclip", "8192"};
 cvar_t	gl_detail			= {"gl_detail","0"};
-cvar_t	gl_caustics			= {"gl_caustics", "0"};
+cvar_t	gl_caustics			= {"gl_caustics", "1"};
 
 cvar_t	gl_subdivide_size = {"gl_subdivide_size", "128", CVAR_ARCHIVE};
-cvar_t	gl_clear = {"gl_clear", "0"};
+cvar_t	gl_clear = {"gl_clear", "1"};
 static qboolean OnChange_gl_clearColor(cvar_t *v, char *s);
 cvar_t	gl_clearColor = {"gl_clearColor", "0 0 0", 0, OnChange_gl_clearColor};
 cvar_t	gl_cull = {"gl_cull", "1"};
 cvar_t	gl_ztrick = {"gl_ztrick", "0"};
-cvar_t	gl_smoothmodels = {"gl_smoothmodels", "1"};
+cvar_t	gl_smoothmodels = {"gl_smoothmodels", "0"};
 cvar_t	gl_polyblend = {"gl_polyblend", "1"};
 cvar_t	gl_flashblend = {"gl_flashblend", "0"};
 cvar_t	gl_playermip = {"gl_playermip", "0"};
 cvar_t	gl_finish = {"gl_finish", "0"};
 cvar_t	gl_fb_bmodels = {"gl_fb_bmodels", "1"};
 cvar_t	gl_fb_models = {"gl_fb_models", "1"};
-cvar_t	gl_lightmode = {"gl_lightmode", "2"};
+cvar_t	gl_lightmode = {"gl_lightmode", "1"};
 cvar_t	gl_loadlitfiles = {"gl_loadlitfiles", "1"};
 
 
-cvar_t gl_part_explosions = {"gl_part_explosions", "0"};
+cvar_t gl_part_explosions = {"gl_part_explosions", "1"};
 cvar_t gl_part_trails = {"gl_part_trails", "0"};
 cvar_t gl_part_spikes = {"gl_part_spikes", "0"};
-cvar_t gl_part_gunshots = {"gl_part_gunshots", "0"};
+cvar_t gl_part_gunshots = {"gl_part_gunshots", "2"};
 cvar_t gl_part_blood = {"gl_part_blood", "0"};
 cvar_t gl_part_telesplash = {"gl_part_telesplash", "0"};
 cvar_t gl_part_blobs = {"gl_part_blobs", "0"};
-cvar_t gl_part_lavasplash = {"gl_part_lavasplash", "0"};
-cvar_t gl_part_inferno = {"gl_part_inferno", "0"};
+cvar_t gl_part_lavasplash = {"gl_part_lavasplash", "1"};
+cvar_t gl_part_inferno = {"gl_part_inferno", "1"};
 
 
 int		lightmode = 2;
@@ -1256,8 +1258,10 @@ static void R_DrawViewModel(void)
 	cent = &cl.viewent;
 	currententity = &gun;
 
-	if (!(gun.model = cl.model_precache[cent->current.modelindex]))
-		Host_Error ("R_DrawViewModel: bad modelindex");
+	// skip on stale weapon modelindex during map-change
+	if (cent->current.modelindex >= MAX_MODELS
+	 || !(gun.model = cl.model_precache[cent->current.modelindex]))
+		return;
 
 	VectorCopy(cent->current.origin, gun.origin);
 	VectorCopy(cent->current.angles, gun.angles);
@@ -1299,8 +1303,11 @@ static void R_DrawViewModel(void)
 void R_PolyBlend (void)
 {
 	extern cvar_t gl_hwblend;
+	extern qboolean V_SoftGammaActive(void);
 	float coords[4*2];
 
+	if (V_SoftGammaActive())
+		return;
 	if (VID_HWGammaSupported() && gl_hwblend.value && !cl.teamfortress)
 		return;
 	if (!v_blend[3])
@@ -1489,7 +1496,7 @@ static void R_SetupFrame (void)
 	c_alias_polys = 0;
 }
 
-__inline void MYgluPerspective(GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar)
+static inline void MYgluPerspective(GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar)
 {
 	GLdouble xmin, xmax, ymin, ymax;
 
@@ -1629,7 +1636,6 @@ int R_Init(void)
 	GL_Init();
 
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &gl_max_size_default);
-	Cvar_SetDefault(&gl_max_size, gl_max_size_default);
 
 	GL_Texture_Init();
 
@@ -1638,6 +1644,8 @@ int R_Init(void)
 	GL_RSurf_Init();
 
 	GL_Warp_Init();
+
+	GL_PostProcess_Init();
 
 	if (R_InitTextures())
 	{
@@ -1673,6 +1681,8 @@ void R_Shutdown()
 	R_ShutdownTextures();
 	GL_RSurf_Shutdown();
 	GL_Warp_Shutdown();
+	GL_PostProcess_Shutdown();
+	GL_FBO_Shutdown();
 	GL_Texture_Shutdown();
 	GL_Shader_Shutdown();
 }

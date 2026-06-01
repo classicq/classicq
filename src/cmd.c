@@ -29,7 +29,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "strl.h"
 
 #include "utils.h"
-#include "context_sensitive_tab.h"
 #include "tokenize_string.h"
 
 extern cvar_t vid_fullscreen;
@@ -450,18 +449,14 @@ void Cmd_Exec_f(void)
 #ifndef SERVERONLY
 	if (cbuf_current == cbuf_svc)
 	{
-		Cbuf_AddText("weight_disable\n");
 		Cbuf_AddText(f);
 		Cbuf_AddText("\n");
-		Cbuf_AddText("weight_enable\n");
 	}
 	else
 #endif
 	{
-		Cbuf_InsertText("weight_enable\n");
 		Cbuf_InsertText("\n");
 		Cbuf_InsertText(f);
-		Cbuf_InsertText("weight_disable\n");
 	}
 
 	free(f);
@@ -967,7 +962,6 @@ void Cmd_AddCommand (char *cmd_name, xcommand_t function)
 	cmd_functions = cmd;
 	cmd->hash_next = cmd_hash_array[key];
 	cmd_hash_array[key] = cmd;
-	cmd->weight = 0;
 }
 
 qboolean Cmd_Exists (char *cmd_name)
@@ -1303,7 +1297,6 @@ static void Cmd_ExecuteStringEx (cbuf_t *context, char *text)
 	cmd_alias_t *a;
 	static char buf[2048];
 	cbuf_t *inserttarget, *oldcontext;
-	extern int weight_disable;
 
 	oldcontext = cbuf_current;
 	cbuf_current = context;
@@ -1358,9 +1351,6 @@ static void Cmd_ExecuteStringEx (cbuf_t *context, char *text)
 			}
 #endif
 
-			if (weight_disable == 0)
-				cmd->weight++;
-
 			if (cmd->function)
 				cmd->function();
 			else
@@ -1383,8 +1373,6 @@ static void Cmd_ExecuteStringEx (cbuf_t *context, char *text)
 	// check cvars
 	if ((v = Cvar_FindVar (Cmd_Argv(0))))
 	{
-		if (weight_disable == 0)
-			v->weight++;
 #ifndef SERVERONLY
 		if (cbuf_current == cbuf_formatted_comms)
 		{
@@ -1400,8 +1388,6 @@ static void Cmd_ExecuteStringEx (cbuf_t *context, char *text)
 checkaliases:
 	if ((a = Cmd_FindAlias(cmd_argv[0])))
 	{
-		if (weight_disable == 0)
-			a->weight++;
 #ifndef SERVERONLY
 		if (cbuf_current == cbuf_svc)
 		{
@@ -1579,180 +1565,6 @@ void Cmd_EnableFunctionExecution()
 	Cbuf_ExecuteEx(cbuf_cmdsave);
 }
 
-static int cstc_alias_check(char *string, struct tokenized_string *ts)
-{
-	int i;
-
-	for (i=0; i<ts->count; i++)
-	{
-		if (strstr(string, ts->tokens[i]) == NULL)
-			return 0;
-	}
-
-	return 1;
-}
-
-
-static int cstc_alias_conditions(void)
-{
-	if (cmd_alias == NULL)
-		return 0;
-	return 1;
-}
-
-static int cstc_alias_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	int count;
-	cmd_alias_t *a;
-	extern cmd_alias_t	*cmd_alias;
-
-	count = 0;
-	if (results)
-	{
-		a = cmd_alias;
-		while (a)
-		{
-			if (cstc_alias_check(a->name, self->tokenized_input))
-				count++;
-			a = a->next;
-		}
-		*results = count;
-		return 0;
-	}
-
-	if (result == NULL)
-		return 0;
-
-	count = -1;
-
-	a = cmd_alias;
-
-	while (a)
-	{
-		if (cstc_alias_check(a->name, self->tokenized_input))
-			count++;
-
-		if (count == get_result)
-		{
-			if (a->value)
-				*result = va("%s \"%s\"", a->name, a->value);
-			else
-				*result = va("%s \"\"", a->name);
-			return 0;
-		}
-
-		a = a->next;
-	}
-
-	return 1;
-}
-
-struct cstc_cfginfo
-{
-	struct directory_list *dl;
-	qboolean *checked;
-	qboolean initialized;
-};
-
-
-static int cstc_exec_get_data(struct cst_info *self, int remove)
-{
-	struct cstc_cfginfo *data;
-	const char * const cfg_endings[] = { ".cfg", NULL};
-
-	if (!self)
-		return 1;
-
-	if (self->data)
-	{
-		data = (struct cstc_cfginfo *)self->data;
-		Util_Dir_Delete(data->dl);
-		free(data->checked);
-		free(data);
-		self->data = NULL;
-	}
-
-	if (remove)
-		return 0;
-
-	if ((data = calloc(1, sizeof(*data))))
-	{
-		if ((data->dl = Util_Dir_Read(va("%s/qw/", com_basedir), 1, 1, cfg_endings)))
-		{
-			if (data->dl->entries == 0)
-			{
-				cstc_exec_get_data(self, 1);
-				return 1;
-			}
-			self->data = data;
-			return 0;
-		}
-		free(data);
-	}
-
-	return 1;
-}
-
-static int cstc_exec_check(char *entry, struct tokenized_string *ts)
-{
-	int i;
-
-	for (i=0; i<ts->count; i++)
-	{
-		if (Util_strcasestr(entry, ts->tokens[i]) == NULL)
-			return 0;
-	}
-	return 1;
-}
-
-static int cstc_exec_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	struct cstc_cfginfo *data;
-	int count, i;
-
-	if (self->data == NULL)
-		return 1;
-
-	data = (struct cstc_cfginfo *)self->data;
-
-	if (results || data->initialized == false)
-	{
-		if (data->checked)
-			free(data->checked);
-		if (!(data->checked= calloc(data->dl->entry_count, sizeof(qboolean))))
-			return 1;
-
-		for (i=0, count=0; i<data->dl->entry_count; i++)
-		{
-			if (cstc_exec_check(data->dl->entries[i].name, self->tokenized_input))
-			{
-				data->checked[i] = true;
-				count++;
-			}
-		}
-		if (results)
-			*results = count;
-
-		data->initialized = true;
-		return 0;
-	}
-
-	if (result == NULL)
-		return 0;
-
-	for (i=0, count=-1; i<data->dl->entry_count; i++)
-	{
-		if (data->checked[i] == true)
-			count++;
-		if (count == get_result)
-		{
-			*result = data->dl->entries[i].name;
-			return 0;
-		}
-	}
-	return 1;
-}
-
 void Cmd_Init (void)
 {
 	// register our commands
@@ -1769,9 +1581,6 @@ void Cmd_Init (void)
 	Cmd_AddCommand("cmdlist", Cmd_CmdList_f);
 	Cmd_AddCommand("if", Cmd_If_f);
 	Cmd_AddCommand("macrolist", Cmd_MacroList_f);
-
-	CSTC_Add("alias", &cstc_alias_conditions, &cstc_alias_get_results, NULL, NULL, 0, "arrow up/down to navigate");
-	CSTC_Add("exec", NULL, &cstc_exec_get_results, &cstc_exec_get_data, NULL, CSTC_EXECUTE, "arrow up/down to navigate");
 }
 
 void Cmd_Shutdown()

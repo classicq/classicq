@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // disable data conversion warnings
 
-#ifdef __MACOSX__
+#ifdef __APPLE__
 #if 0
 #include <AGL/agl.h>
 #endif
@@ -213,6 +213,7 @@ void R_InitOtherTextures(void);
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE1 0x84C1
 #define GL_TEXTURE2 0x84C2
+#define GL_ACTIVE_TEXTURE 0x84E0
 #endif
 
 #ifdef __MORPHOS__
@@ -265,6 +266,7 @@ extern void (APIENTRY *qglLinkProgram)(GLuint program);
 extern void (APIENTRY *qglShaderSource)(GLuint shader, GLsizei count, const GLchar **string, const GLint *length);
 extern void (APIENTRY *qglUniform1f)(GLint location, GLfloat v0);
 extern void (APIENTRY *qglUniform1i)(GLint location, GLint v0);
+extern void (APIENTRY *qglUniform4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 extern void (APIENTRY *qglUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 extern void (APIENTRY *qglUseProgram)(GLuint program);
 
@@ -273,13 +275,46 @@ extern void (APIENTRY *qglDisableVertexAttribArray)(GLuint index);
 extern void (APIENTRY *qglEnableVertexAttribArray)(GLuint index);
 extern void (APIENTRY *qglVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
 
+/* FBO stuff */
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#endif
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_RENDERBUFFER
+#define GL_RENDERBUFFER 0x8D41
+#endif
+#ifndef GL_FRAMEBUFFER_COMPLETE
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#endif
+#ifndef GL_COLOR_ATTACHMENT0
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#endif
+#ifndef GL_DEPTH_ATTACHMENT
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#endif
+#ifndef GL_DEPTH_COMPONENT24
+#define GL_DEPTH_COMPONENT24 0x81A6
+#endif
+
+extern void (APIENTRY *qglGenFramebuffers)(GLsizei n, GLuint *framebuffers);
+extern void (APIENTRY *qglDeleteFramebuffers)(GLsizei n, const GLuint *framebuffers);
+extern void (APIENTRY *qglBindFramebuffer)(GLenum target, GLuint framebuffer);
+extern void (APIENTRY *qglFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+extern void (APIENTRY *qglFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+extern GLenum (APIENTRY *qglCheckFramebufferStatus)(GLenum target);
+extern void (APIENTRY *qglGenRenderbuffers)(GLsizei n, GLuint *renderbuffers);
+extern void (APIENTRY *qglDeleteRenderbuffers)(GLsizei n, const GLuint *renderbuffers);
+extern void (APIENTRY *qglBindRenderbuffer)(GLenum target, GLuint renderbuffer);
+extern void (APIENTRY *qglRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
 
 
 extern float gldepthmin, gldepthmax;
 extern byte color_white[4], color_black[4];
 extern qboolean gl_mtexable;
 extern int gl_textureunits;
-extern qboolean gl_combine, gl_add_ext, gl_npot, gl_vbo, gl_vs, gl_fs;
+extern qboolean gl_combine, gl_add_ext, gl_npot, gl_vbo, gl_vs, gl_fs, gl_fbo;
 
 extern int vbo_number;
 

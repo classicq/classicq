@@ -137,7 +137,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * FTE extensions *
  ******************/
 
+#define svcfte_spawnstatic2     21 /* FTEX_SPAWNBASELINE2 (FTE_PEXT_SPAWNSTATIC2) */
 #define svcfte_lightstylecol    57 /* FTEX_LIGHTSTYLECOLOUR */
+#define svcfte_modellistshort   60 /* FTEX_MODELDOUBLE */
 #define svcfte_spawnbaseline2   66 /* FTEX_SPAWNSTATIC2 || FTEX_REPLACEMENTDELTAS */
 #define svcfte_updatestatfloat  79 /* FTEX_CSQC */
 
@@ -177,6 +179,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // bits 11..13 are player move type bits
 #define PF_PMC_SHIFT    11
 #define	PF_PMC_MASK     7
+
+#define PF_EXTRA_PFS    (1 << 15)
+#define PF_TRANS_Z      (1 << 17)
 
 // player move types
 #define PMC_NORMAL              0		// normal ground movement
@@ -301,19 +306,46 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define QW_PROTOEXT_HUFF 0x46465548
 #define QW_PROTOEXT_FTEX 0x58455446
 #define QW_PROTOEXT_FTE2 0x32455446
+#define QW_PROTOEXT_MVD1 0x3144564D /* 'MVD1' little-endian, mvdsv 2017+ */
+
+// MVD-specific extensions (QW_PROTOEXT_MVD1)
+#define MVD_PEXT1_FLOATCOORDS      (1 << 0)
+#define MVD_PEXT1_HIGHLAGTELEPORT  (1 << 1)
+#define MVD_PEXT1_SERVERSIDEWEAPON (1 << 2)
+#define MVD_PEXT1_DEBUG_ANTILAG    (1 << 3)
+#define MVD_PEXT1_DEBUG_WEAPON     (1 << 4)
+#define MVD_PEXT1_HIDDEN_MESSAGES  (1 << 5)
+#define MVD_PEXT1_SERVERSIDEWEAPON2 (1 << 6)
+#define MVD_PEXT1_ANTILAG_CLIENTPOS (1 << 7)
 
 #define FTEX_SCALE            0x00000002
 #define FTEX_LIGHTSTYLECOLOUR 0x00000004
 #define FTEX_TRANS            0x00000008
 #define FTEX_FATNESS          0x00000100
 #define FTEX_MODELDOUBLE      0x00001000
+#define FTEX_ENTITYDBL        0x00002000
+#define FTEX_ENTITYDBL2       0x00004000
 #define FTEX_FLOATCOORDS      0x00008000
 #define FTEX_COLOURMOD        0x00080000
 #define FTEX_SPAWNBASELINE2   0x00400000
 #define FTEX_CHUNKEDDOWNLOADS 0x20000000
 #define FTEX_CSQC             0x40000000
 
-#define FTEX_SUPPORTED (FTEX_FLOATCOORDS /*| FTEX_CHUNKEDDOWNLOADS*/)
+#define FTEX_SUPPORTED ( \
+		FTEX_FLOATCOORDS         | \
+		FTEX_CHUNKEDDOWNLOADS    | \
+		FTEX_MODELDOUBLE         | \
+		FTEX_SPAWNBASELINE2      | \
+		FTEX_TRANS               | \
+		FTEX_COLOURMOD           | \
+		FTEX_SCALE               | \
+		FTEX_FATNESS             | \
+		FTEX_LIGHTSTYLECOLOUR    | \
+		FTEX_ENTITYDBL           | \
+		FTEX_ENTITYDBL2)
+
+#define FTE2_SUPPORTED 0
+#define MVD1_SUPPORTED 0
 
 /*
 ==========================================================

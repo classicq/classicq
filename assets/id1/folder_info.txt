@@ -1,0 +1,6 @@
+When you purchase the full version of Quake, copy pak0.pak and pak1.pak to this folder.
+
+You can buy Quake here:
+http://store.steampowered.com/app/2310/
+
+Filenames must be lowercase (pak0.pak, NOT PAK0.PAK). If your copy has uppercase names, rename them.

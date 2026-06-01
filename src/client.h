@@ -182,7 +182,7 @@ struct static_entity
 	entity_t ent;
 };
 
-#define	MAX_EFRAGS		512
+#define	MAX_EFRAGS		8192
 
 #define	MAX_DEMOS		8
 #define	MAX_DEMONAME	16
@@ -241,6 +241,8 @@ typedef struct {
 	int			downloadnumber;
 	dltype_t	downloadtype;
 	int			downloadpercent;
+	int			downloadrate;		// KB/s, average since downloadstarttime
+	double		downloadstarttime;
 
 	// demo recording info must be here, because record is started before entering a map (and clearing clientState_t)
 	qboolean	demorecording;
@@ -263,6 +265,7 @@ typedef struct {
 	unsigned int hufftablecrc;
 	unsigned int ftexsupported;
 	unsigned int fte2supported;
+	unsigned int mvdprotocolextensions1;
 	qboolean extensionsqueried;
 } clientPersistent_t;
 
@@ -451,7 +454,7 @@ extern cvar_t r_rockettrail;
 extern cvar_t r_grenadetrail;
 extern cvar_t r_powerupglow;
 
-#define	CL_MAX_EDICTS		768			// FIXME: ouch! ouch! ouch!
+#define	CL_MAX_EDICTS		2048
 
 // FIXME, allocate dynamically
 extern	centity_t		cl_entities[CL_MAX_EDICTS];
@@ -515,7 +518,9 @@ void CL_StopUpload(void);
 
 void CL_ParseClientdata (void);	
 
-void CL_RequestNextFTEDownloadChunk(sizebuf_t *buf);
+void CL_SendChunkedDownloadRequests(void);
+void CL_ParseChunkedDownloadOOB(void);
+void CL_CleanupActiveDownload(qboolean completed);
 
 void CL_FreeStatics(void);
 

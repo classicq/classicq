@@ -96,6 +96,7 @@ typedef struct {
 	float	bunnyspeedcap;
 	float	ktjump;
 	int		slidefix;
+	int		airstep;
 } movevars_t;
 
 extern	movevars_t		movevars;

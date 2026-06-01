@@ -55,8 +55,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //=============================================================================
 
 
-#define Q1_BSPVERSION	29
-#define HL_BSPVERSION	30
+#define Q1_BSPVERSION		29
+#define HL_BSPVERSION		30
+#define Q1_BSPVERSION2		(('B') + ('S' << 8) + ('P' << 16) + ('2' << 24))
+#define Q1_BSPVERSION29a	(('2') + ('P' << 8) + ('S' << 16) + ('B' << 24))
 
 typedef struct
 {
@@ -143,7 +145,6 @@ typedef struct
 #define	CONTENTS_LAVA		-5
 #define	CONTENTS_SKY		-6
 
-// !!! if this is changed, it must be changed in asm_i386.h too !!!
 typedef struct
 {
 	int			planenum;
@@ -154,11 +155,29 @@ typedef struct
 	unsigned short	numfaces;	// counting both sides
 } dnode_t;
 
+// BSP2 node: wide indices + float bounds
+typedef struct
+{
+	int			planenum;
+	int			children[2];
+	float		mins[3];
+	float		maxs[3];
+	unsigned int	firstface;
+	unsigned int	numfaces;
+} dnode_bsp2_t;
+
 typedef struct
 {
 	int			planenum;
 	short		children[2];	// negative numbers are contents
 } dclipnode_t;
+
+// Wide-index clipnode used by both BSP2 and 2PSB
+typedef struct
+{
+	int			planenum;
+	int			children[2];
+} dclipnode29a_t;
 
 
 typedef struct texinfo_s
@@ -176,6 +195,12 @@ typedef struct
 	unsigned short	v[2];		// vertex numbers
 } dedge_t;
 
+// Wide-vertex edge used by both BSP2 and 2PSB
+typedef struct
+{
+	unsigned int	v[2];
+} dedge29a_t;
+
 #define	MAXLIGHTMAPS	4
 typedef struct
 {
@@ -183,13 +208,27 @@ typedef struct
 	short		side;
 
 	int			firstedge;		// we must support > 64k edges
-	short		numedges;	
+	short		numedges;
 	short		texinfo;
 
 // lighting info
 	byte		styles[MAXLIGHTMAPS];
 	int			lightofs;		// start of [numstyles*surfsize] samples
 } dface_t;
+
+// Wide-index face used by both BSP2 and 2PSB
+typedef struct
+{
+	int			planenum;
+	int			side;
+
+	int			firstedge;
+	int			numedges;
+	int			texinfo;
+
+	byte		styles[MAXLIGHTMAPS];
+	int			lightofs;
+} dface29a_t;
 
 
 
@@ -215,6 +254,36 @@ typedef struct
 
 	byte		ambient_level[NUM_AMBIENTS];
 } dleaf_t;
+
+// BSP2 leaf: wide marksurface indices + float bounds
+typedef struct
+{
+	int			contents;
+	int			visofs;
+
+	float		mins[3];
+	float		maxs[3];
+
+	unsigned int	firstmarksurface;
+	unsigned int	nummarksurfaces;
+
+	byte		ambient_level[NUM_AMBIENTS];
+} dleaf_bsp2_t;
+
+// BSPX extension header
+typedef struct
+{
+	char	id[4];		// "BSPX"
+	int		numlumps;
+} bspx_header_t;
+
+// BSPX lump entries follow the header consecutively.
+typedef struct
+{
+	char	lumpname[24];	// zero-padded ASCII
+	int		fileofs;
+	int		filelen;
+} bspx_lump_t;
 
 #endif // __bspfile_h
 

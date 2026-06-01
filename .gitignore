@@ -6,6 +6,11 @@ zig-cache/
 zig-out/
 zig-pkg/
 
+assets/classicq-windows-amd64.exe
+assets/classicq-linux-amd64
+assets/classicq-macos-arm64
+assets/classicq-macos-arm64.app/
+
 *.o
 *.obj
 *.a

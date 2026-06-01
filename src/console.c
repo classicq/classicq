@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "strl.h"
 #include "utils.h"
 #include "console.h"
+#include "logging.h"
 
 static qboolean con_parsecolors_callback(cvar_t *, char *);
 
@@ -583,6 +584,8 @@ void Con_Print(const char *txt)
 	char *tmp;
 	char colourbuf[256];
 	void *freethis;
+
+	Log_Write(txt);
 
 	if (suppressed)
 		return;

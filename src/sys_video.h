@@ -32,6 +32,7 @@ void Sys_Video_GrabMouse(void *display, int dograb);
 void Sys_Video_SetWindowTitle(void *display, const char *text);
 unsigned int Sys_Video_GetWidth(void *display);
 unsigned int Sys_Video_GetHeight(void *display);
+float Sys_Video_GetDPIScale(void *display);
 qboolean Sys_Video_GetFullscreen(void *display);
 const char *Sys_Video_GetMode(void *display);
 int Sys_Video_FocusChanged(void *display);

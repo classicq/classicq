@@ -54,6 +54,15 @@ struct ReliableBuffer
 	/* data follows :) */
 };
 
+// unreliable buffer for fire-and-forget commands (no ack, no retransmit)
+struct UnreliableBuffer
+{
+	struct UnreliableBuffer *next;
+	unsigned int length;
+
+	/* data follows */
+};
+
 struct NetPacket
 {
 	struct NetPacket *clientnext;
@@ -135,6 +144,8 @@ struct NetQW
 	int lag_ezcheat;
 	struct ReliableBuffer *reliablebufferhead;
 	struct ReliableBuffer *reliablebuffertail;
+	struct UnreliableBuffer *unreliablebufferhead;
+	struct UnreliableBuffer *unreliablebuffertail;
 	struct NetPacket *clientnetpackethead;
 	struct NetPacket *clientnetpackettail;
 	unsigned long long lastserverpackettime;
@@ -543,11 +554,22 @@ static void NetQW_Thread_DoReceive(struct NetQW *netqw)
 		if (netqw->state == state_connected && netqw->huffcontext)
 		{
 			r = Sys_Net_Receive(netqw->netdata, netqw->socket, compressedbuf, sizeof(compressedbuf) - 1, &addr);
-			memcpy(buf, compressedbuf, 8);
-			if (r > 8)
+
+			// OOB packets (0xffffffff prefix) skip decompression
+			if (r >= 4 && compressedbuf[0] == 0xff && compressedbuf[1] == 0xff && compressedbuf[2] == 0xff && compressedbuf[3] == 0xff)
 			{
-				r = Huff_DecompressPacket(netqw->huffcontext, compressedbuf + 8, r - 8, buf + 8, sizeof(buf) - 8 - 1);
-				r += 8;
+				if (r > (int)sizeof(buf))
+					r = sizeof(buf);
+				memcpy(buf, compressedbuf, r);
+			}
+			else
+			{
+				memcpy(buf, compressedbuf, 8);
+				if (r > 8)
+				{
+					r = Huff_DecompressPacket(netqw->huffcontext, compressedbuf + 8, r - 8, buf + 8, sizeof(buf) - 8 - 1);
+					r += 8;
+				}
 			}
 		}
 		else
@@ -578,6 +600,10 @@ static void NetQW_Thread_DoReceive(struct NetQW *netqw)
 
 				if (i < 16)
 				{
+					// reset wishlist; OR-in per server FTEX advertisement
+					unsigned int ftex_wishlist = netqw->ftex;
+					netqw->ftex = 0;
+
 					memcpy(challengebuf, buf + 5, i);
 					challengebuf[i] = 0;
 
@@ -609,7 +635,10 @@ static void NetQW_Thread_DoReceive(struct NetQW *netqw)
 							}
 							else if (extension == QW_PROTOEXT_FTEX)
 							{
-								netqw->ftex &= value;
+								netqw->ftex |= ftex_wishlist & value;
+							}
+							else if (extension == QW_PROTOEXT_FTE2 || extension == QW_PROTOEXT_MVD1)
+							{
 							}
 							else
 							{
@@ -663,6 +692,38 @@ static void NetQW_Thread_DoReceive(struct NetQW *netqw)
 			}
 			else
 			{
+				if (r < 4)
+					continue;
+
+				// OOB packets (0xffffffff prefix) bypass sequenced channel
+				if (buf[0] == 0xff && buf[1] == 0xff && buf[2] == 0xff && buf[3] == 0xff)
+				{
+					netpacket = malloc(sizeof(*netpacket) + r);
+					if (netpacket)
+					{
+						netpacket->clientnext = 0;
+						netpacket->internalnext = 0;
+						netpacket->delayuntil = 0;
+						netpacket->length = r;
+						netpacket->usecount = 1;
+						memcpy(netpacket + 1, buf, r);
+
+						Sys_Thread_LockMutex(netqw->mutex);
+						if (netqw->clientnetpackettail)
+						{
+							netqw->clientnetpackettail->clientnext = netpacket;
+							netqw->clientnetpackettail = netpacket;
+						}
+						else
+						{
+							netqw->clientnetpackethead = netpacket;
+							netqw->clientnetpackettail = netpacket;
+						}
+						Sys_Thread_UnlockMutex(netqw->mutex);
+					}
+					continue;
+				}
+
 				if (r < 8)
 					continue;
 
@@ -847,6 +908,26 @@ static void NetQW_Thread_DoSend(struct NetQW *netqw)
 
 					buf[3] |= 0x80;
 				}
+			}
+
+			// Drain unreliable buffer (no ack gate)
+			{
+				struct UnreliableBuffer *ub;
+
+				Sys_Thread_LockMutex(netqw->mutex);
+
+				while ((ub = netqw->unreliablebufferhead) && i + ub->length < 1450)
+				{
+					memcpy(buf + i, ub + 1, ub->length);
+					i += ub->length;
+					netqw->unreliablebufferhead = ub->next;
+					free(ub);
+				}
+
+				if (netqw->unreliablebufferhead == 0)
+					netqw->unreliablebuffertail = 0;
+
+				Sys_Thread_UnlockMutex(netqw->mutex);
 			}
 
 			NetQW_Thread_SendPacket(netqw, buf, i, &netqw->addr, 0);
@@ -1037,6 +1118,8 @@ struct NetQW *NetQW_Create(const char *hoststring, const char *userinfo, unsigne
 		netqw->reliable_buffers_sent = 0;
 		netqw->reliablebufferhead = 0;
 		netqw->reliablebuffertail = 0;
+		netqw->unreliablebufferhead = 0;
+		netqw->unreliablebuffertail = 0;
 		netqw->clientnetpackethead = 0;
 		netqw->clientnetpackettail = 0;
 		netqw->internalnetpackethead = 0;
@@ -1145,6 +1228,15 @@ void NetQW_Delete(struct NetQW *netqw)
 		free(reliablebuffer);
 	}
 
+	{
+		struct UnreliableBuffer *ub;
+		while ((ub = netqw->unreliablebufferhead))
+		{
+			netqw->unreliablebufferhead = ub->next;
+			free(ub);
+		}
+	}
+
 	while((netpacket = netqw->clientnetpackethead))
 	{
 		netqw->clientnetpackethead = netpacket->clientnext;
@@ -1231,6 +1323,38 @@ int NetQW_AppendReliableBuffer(struct NetQW *netqw, const void *buffer, unsigned
 		{
 			netqw->reliablebufferhead = reliablebuffer;
 			netqw->reliablebuffertail = reliablebuffer;
+		}
+
+		Sys_Thread_UnlockMutex(netqw->mutex);
+
+		return 1;
+	}
+
+	return 0;
+}
+
+int NetQW_AppendUnreliableBuffer(struct NetQW *netqw, const void *buffer, unsigned int bufferlen)
+{
+	struct UnreliableBuffer *ub;
+
+	ub = malloc(sizeof(*ub) + bufferlen);
+	if (ub)
+	{
+		ub->next = 0;
+		ub->length = bufferlen;
+		memcpy(ub + 1, buffer, bufferlen);
+
+		Sys_Thread_LockMutex(netqw->mutex);
+
+		if (netqw->unreliablebuffertail)
+		{
+			netqw->unreliablebuffertail->next = ub;
+			netqw->unreliablebuffertail = ub;
+		}
+		else
+		{
+			netqw->unreliablebufferhead = ub;
+			netqw->unreliablebuffertail = ub;
 		}
 
 		Sys_Thread_UnlockMutex(netqw->mutex);

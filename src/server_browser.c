@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2009 Jürgen Legler
+Copyright (C) 2009 Jï¿½rgen Legler
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -31,7 +31,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "server_browser_qtv.h"
 #include "utils.h"
 #include "tokenize_string.h"
-#include "context_sensitive_tab.h"
 
 static void SB_AddMacros(void);
 
@@ -61,15 +60,21 @@ static struct sb_friend *friends;
 static int qtv_connect_pending;
 static double qtv_connect_time;
 
-static cvar_t sb_masterserver = {"sb_masterserver", "qwmaster.fodquake.net:27000 master.quakeservers.net:27000 satan.idsoftware.com:27000"};
+static cvar_t sb_masterserver = {"sb_masterserver", "master.quakeservers.net:27000 qwmaster.fodquake.net:27000 master.quakeworld.nu:27000"};
 static cvar_t sb_player_drawing = {"sb_player_drawing", "1"};
-static cvar_t sb_refresh_on_activate = {"sb_refresh_on_activate", "1"};
+static cvar_t sb_refresh_on_activate = {"sb_refresh_on_activate", "0"};
+
+static double sb_last_rescan_time;
+static int sb_ctrlr_count_in_session;
+static int sb_full_refresh_pending;
+cvar_t sb_debug = {"sb_debug", "0"};
+static cvar_t sb_bg_color = {"sb_bg_color", "112"};
 
 static cvar_t sb_color_bg = {"sb_color_bg", "1"};
-static cvar_t sb_color_bg_free = {"sb_color_bg_free", "55"};
+static cvar_t sb_color_bg_free = {"sb_color_bg_free", "51"};
 static cvar_t sb_color_bg_full = {"sb_color_bg_full", "70"};
-static cvar_t sb_color_bg_empty = {"sb_color_bg_empty", "1"};
-static cvar_t sb_color_bg_specable = {"sb_color_bg_specable", "88"};
+static cvar_t sb_color_bg_empty = {"sb_color_bg_empty", "112"};
+static cvar_t sb_color_bg_specable = {"sb_color_bg_specable", "83"};
 static cvar_t sb_qtv_proxy = {"sb_qtv_proxy", "qtv.fodquake.net:27599"};
 static cvar_t sb_qtv_lookup = {"sb_qtv_lookup", "qtv.fodquake.net:12000"};
 static cvar_t sb_qtv_connect_timeout = {"sb_qtv_connect_timeout", "2"};
@@ -541,6 +546,8 @@ static void SB_Refresh(void)
 {
 	struct tab *tab;
 
+	sb_full_refresh_pending = 1;
+
 	if (serverscanner)
 	{
 		ServerScanner_FreeServers(serverscanner, sb_qw_server);
@@ -847,7 +854,7 @@ static int map_compare(const void *a, const void *b)
 	}
 }
 
-int (* compare_functions[])(const void *a, const void *b) = 
+int (* compare_functions[])(const void *a, const void *b) =
 {
 	player_count_compare,
 	map_compare,
@@ -855,9 +862,31 @@ int (* compare_functions[])(const void *a, const void *b) =
 	ping_compare
 };
 
+static int activity_then_ping_compare(const void *a, const void *b)
+{
+	struct QWServer *x, *y;
+	int x_empty, y_empty;
+	int ping_cmp;
+
+	x = (struct QWServer *) sb_qw_server[*(int *)a];
+	y = (struct QWServer *) sb_qw_server[*(int *)b];
+
+	x_empty = (x->numplayers > 0) ? 0 : 1;
+	y_empty = (y->numplayers > 0) ? 0 : 1;
+
+	if (x_empty != y_empty)
+		return x_empty - y_empty;
+
+	ping_cmp = (int)(x->pingtime / 1000) - (int)(y->pingtime / 1000);
+	if (ping_cmp != 0)
+		return ping_cmp;
+
+	return strcasecmp(x->hostname, y->hostname);
+}
+
 static void sort_tab(struct tab *tab)
 {
-	qsort(tab->server_index, tab->server_count, sizeof(int), compare_functions[tab->column_types[tab->sort].type]);
+	qsort(tab->server_index, tab->server_count, sizeof(int), activity_then_ping_compare);
 }
 
 static int stubby (struct tab *tab, const struct QWServer *server)
@@ -1001,7 +1030,7 @@ static void update_tab(struct tab *tab)
 	for (x=0, i=0;x<sb_qw_server_count; x++)
 	{
 		if (cf(tab, sb_qw_server[x]))
-				tab->server_index[i++] = x;		
+				tab->server_index[i++] = x;
 	}
 
 	if (tab->sb_position >= tab->server_count)
@@ -1166,42 +1195,6 @@ void SB_Key(int key)
 		return;
 	}
 
-	if (key == K_TAB)
-	{
-		if (keydown[K_CTRL])
-		{
-			if (tab_active->friends == 1)
-				return;
-			if (sb_active_window == SB_SERVER)
-			{
-				sb_active_window = SB_FILTER;
-			}
-			else
-			{
-				sb_active_window = SB_SERVER;
-			}
-			return;
-		}
-
-		if (sb_active_window == SB_SERVER)
-		{
-			tab = tab_active;
-
-			if (keydown[K_SHIFT])
-				tab->sort--;
-			else
-				tab->sort++;
-
-			if (tab->sort >= tab->columns)
-				tab->sort = 0;
-			if (tab->sort < 0)
-				tab->sort = tab->columns - 1;
-			sort_tab(tab);
-
-			SB_Set_Statusbar("Sorted by %s\n", column_names[tab->column_types[tab->sort].type]);
-			return;
-		}
-	}
 
 	if (sb_active_window == SB_FILTER)
 	{
@@ -1355,11 +1348,7 @@ void SB_Key(int key)
 				tab->sb_position--;
 
 			if (tab->sb_position < 0)
-			{
-				tab->sb_position = tab->server_count - 1;
-				if (tab->sb_position < 0)
-					tab->sb_position = 0;
-			}
+				tab->sb_position = 0;
 
 			if (tab->server_count == 0 || tab->sb_position > tab->server_count)
 			{
@@ -1385,7 +1374,7 @@ void SB_Key(int key)
 			else
 				tab->sb_position++;
 			if (tab->sb_position >= tab->server_count)
-				tab->sb_position = 0;
+				tab->sb_position = tab->server_count - 1;
 
 			if (tab->server_count == 0 || tab->sb_position > tab->server_count)
 			{
@@ -1477,10 +1466,17 @@ void SB_Key(int key)
 		{
 			if (keydown[K_CTRL])
 			{
-				SB_Refresh();
+				if (sb_ctrlr_count_in_session == 0 && serverscanner)
+					ServerScanner_RescanAll(serverscanner);
+				else
+					SB_Refresh();
+				sb_ctrlr_count_in_session++;
 				return;
 			}
-			
+
+			if (cls.realtime - sb_last_rescan_time < 0.5)
+				return;
+
 			if (sb_qw_server)
 			{
 				if (tab->server_index)
@@ -1494,6 +1490,7 @@ void SB_Key(int key)
 				}
 
 				ServerScanner_RescanServer(serverscanner, server);
+				sb_last_rescan_time = cls.realtime;
 			}
 		}
 	}
@@ -1502,59 +1499,6 @@ void SB_Key(int key)
 	{
 		SB_Close();
 		return;
-	}
-
-	if (key == K_LEFTARROW)
-	{
-		if (tab_active->prev)
-			tab_active = tab_active->prev;
-		else
-			tab_active = tab_last;
-		return;
-	}
-
-	if (key == K_RIGHTARROW)
-	{
-		if (tab_active->next)
-			tab_active = tab_active->next;
-		else
-			tab_active = tab_first;
-
-		return;
-	}
-
-	switch (key)
-	{
-		case '1':
-			sb_activate_tab(0);
-			break;
-		case '2':
-			sb_activate_tab(1);
-			break;
-		case '3':
-			sb_activate_tab(2);
-			break;
-		case '4':
-			sb_activate_tab(3);
-			break;
-		case '5':
-			sb_activate_tab(4);
-			break;
-		case '6':
-			sb_activate_tab(5);
-			break;
-		case '7':
-			sb_activate_tab(6);
-			break;
-		case '8':
-			sb_activate_tab(7);
-			break;
-		case '9':
-			sb_activate_tab(8);
-			break;
-		case '0':
-			sb_activate_tab(9);
-			break;
 	}
 }
 
@@ -1659,6 +1603,7 @@ void SB_Activate_f(void)
 	old_keydest = key_dest;
 	key_dest = key_serverbrowser;
 	sb_open = 1;
+	sb_ctrlr_count_in_session = 0;
 
 	if (tab_first == NULL)
 	{
@@ -1836,7 +1781,7 @@ static void SB_Draw_Tabs(void)
 
 static void SB_Draw_Background(void)
 {
-	Draw_Fill(0, 0, vid.conwidth, vid.conheight, 1);
+	Draw_Fill(0, 0, vid.conwidth, vid.conheight, (int)sb_bg_color.value);
 }
 
 static void SB_Draw_Filter_Insert(void)
@@ -1982,10 +1927,7 @@ static void SB_Draw_Server(void)
 	k = 0;
 	for (x=0; x<tab->columns; x++)
 	{
-		if (sorted_enum == tab->column_types[x].type)
-			k += snprintf(string + k, sizeof(string) - k, "&cf00%-*.*s&cfff ", tab->column_types[x].length, tab->column_types[x].length, column_names[tab->column_types[x].type]);
-		else
-			k += snprintf(string + k, sizeof(string) - k, "%-*.*s ", tab->column_types[x].length, tab->column_types[x].length, column_names[tab->column_types[x].type]);
+		k += snprintf(string + k, sizeof(string) - k, "%-*.*s ", tab->column_types[x].length, tab->column_types[x].length, column_names[tab->column_types[x].type]);
 
 		if (k >= sizeof(string))
 			break;
@@ -2147,23 +2089,7 @@ static void SB_Draw_Server(void)
 		}
 
 		if (server == current_selected_server)
-			Draw_Fill(0, 24 + i * 8, vid.conwidth , 9 , 13);
-
-		
-
-		if (sb_highlight_sort_column.value)
-		{
-			for (header_x=0, header_distance=0; header_x<tab->columns; header_x++)
-			{
-				if (sorted_enum == tab->column_types[header_x].type)
-				{
-					Draw_AlphaFill((header_distance + 1)*8, 24 + i *8, 8 * tab->column_types[header_x].length, 8, sb_highlight_sort_column_color.value, sb_highlight_sort_column_alpha.value);
-					break;
-				}
-				else
-					header_distance += tab->column_types[header_x].length + 1;
-			}
-		}
+			Draw_Fill(0, 24 + i * 8, vid.conwidth , 9 , 171);
 
 		string[0] = 0;
 		
@@ -2234,7 +2160,7 @@ static void SB_Draw_Server(void)
 
 
 		//if (player_space < line_space/2)
-			Draw_Fill(0, y*8, vid.conwidth, player_space * 8, 2);
+			Draw_Fill(0, y*8, vid.conwidth, player_space * 8, 113);
 		Draw_Fill(0, y*8, vid.conwidth, 8, 20);
 		Draw_String(0, (y++)*8, "ping time frags team");
 		player = (struct QWPlayer *)&server->players[0];
@@ -2281,7 +2207,16 @@ static void SB_Draw_Server(void)
 
 static void SB_Draw_Status_Bar(void)
 {
-	Draw_String(0, vid.conheight - 8, sb_status_bar);
+	const char *hint;
+	char line[512];
+
+	if (sb_ctrlr_count_in_session == 0)
+		hint = "Ctrl+R: refresh   R: update selected";
+	else
+		hint = "Ctrl+R: full rescan   R: update selected";
+
+	snprintf(line, sizeof(line), "%-24s%s", sb_status_bar, hint);
+	Draw_String(0, vid.conheight - 8, line);
 }
 
 static void SB_Draw_Help(void)
@@ -2368,21 +2303,28 @@ void SB_Frame(void)
 		sss = ServerScanner_GetStatus(serverscanner);
 		if (sss == SSS_IDLE)
 		{
-			SB_Set_Statusbar("All done. Press \"ctrl + h\" for help.");
+			SB_Set_Statusbar("All done.");
 			sb_check_serverscanner = 0;
+			if (sb_full_refresh_pending && tab_active && tab_active->server_count > 0 && tab_active->server_index)
+			{
+				tab_active->sb_position = 0;
+				current_selected_server = sb_qw_server[tab_active->server_index[0]];
+				tab_active->changed = 1;
+			}
+			sb_full_refresh_pending = 0;
 		}
 		else if (sss == SSS_SCANNING)
 		{
-			todo = 0;//ServerScanner_ServersToScan(serverscanner);			
+			todo = 0;//ServerScanner_ServersToScan(serverscanner);
 			count = 0;//ServerScanner_Servers(serverscanner);
-			SB_Set_Statusbar("Scanning servers. Press \"ctrl + h\" for help");
+			SB_Set_Statusbar("Scanning servers...");
 		}
 		else if (sss == SSS_PINGING)
 		{
-			SB_Set_Statusbar("Pinging servers. Press \"ctrl + h\" for help.");
+			SB_Set_Statusbar("Pinging servers...");
 		}
 		else if (sss == SSS_ERROR)
-			SB_Set_Statusbar("Server scanner error. Press \"ctrl +h\" for help.\n");
+			SB_Set_Statusbar("Server scanner error.");
 	}
 
 	if (serverscanner)
@@ -2403,8 +2345,6 @@ void SB_Frame(void)
 		return;
 
 	SB_Draw_Background();
-	if (sb_active_window != SB_HELP)
-		SB_Draw_Tabs();
 	if (sb_active_window == SB_SERVER && serverscanner)
 		SB_Draw_Server();
 	if (sb_active_window == SB_FILTER)
@@ -2743,7 +2683,7 @@ void SB_Remove_Friend_f(void)
 
 void SB_Init(void)
 {
-	SB_Set_Statusbar("just started!. press \"ctrl + h\" for help\n");
+	SB_Set_Statusbar("Loading...");
 }
 
 static struct tab *Get_Tab_By_Name(char *name)
@@ -2823,211 +2763,6 @@ void SB_Tab_Layout_f(void)
 	update_tab(tab);
 }
 
-struct cstc_sbdata
-{
-	qboolean initialized;
-	qboolean *checked;
-	int map_length;
-	int count;
-};
-
-static qboolean cstc_connect_check(struct cst_info *self, const struct QWServer *server, struct tokenized_string *ts)
-{
-	int i;
-	extern cvar_t context_sensitive_tab_completion_connect_show_empty;
-
-	if (server->status == QWSS_FAILED)
-		return false;
-
-	if (server->numplayers > 0 || self->toggleables[0])
-	{
-		for (i=0; i<ts->count; i++)
-			if (Util_strcasestr(va("%s %3i/%3i %s", server->map ? server->map : "", server->numplayers, server->maxclients, server->hostname ? server->hostname : "") , ts->tokens[i]) == NULL)
-				return false;
-	}
-	else
-		return false;
-
-	return true;
-}
-
-static int cstc_connect_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	int count, i;
-	struct QWServer *server;
-	struct cstc_sbdata *data;
-	qboolean resort = false;
-
-	if (self == NULL)
-		return 1;
-
-	if (self->data == NULL)
-		return 1;
-
-	data = (struct cstc_sbdata *)self->data;
-
-	if ((serverscanner && ServerScanner_DataUpdated(serverscanner)) || self->toggleables[2] == true)
-	{
-		if (self->toggleables[2] || sb_qw_server == NULL)
-			SB_Refresh();
-		if (sb_qw_server)
-			ServerScanner_FreeServers(serverscanner, sb_qw_server);
-		sb_qw_server = ServerScanner_GetServers(serverscanner, &sb_qw_server_count);
-
-		if (data->checked)
-		{
-			free(data->checked);
-			data->checked = NULL;
-		}
-
-		resort = true;
-		self->toggleables[2] = false;
-	}
-
-	if (sb_qw_server_count == 0)
-		return 1;
-
-	if (data->checked == NULL)
-	{
-		if ((data->checked = calloc(sb_qw_server_count, sizeof(qboolean))) == NULL)
-			return 1;
-		resort = true;
-	}
-
-	if (sb_qw_server == NULL)
-		return 1;
-
-	if (resort || self->input_changed || self->toggleables_changed)
-	{
-		for (i=0, count=0; i<sb_qw_server_count; i++)
-		{
-			if (cstc_connect_check(self, sb_qw_server[i], self->tokenized_input))
-			{
-				data->checked[i] = true;
-				if (sb_qw_server[i]->map)
-					if (data->map_length < strlen(sb_qw_server[i]->map))
-						data->map_length = strlen(sb_qw_server[i]->map);
-				count++;
-			}
-			else
-				data->checked[i] = false;
-		}
-		data->count = count;
-	}
-
-	if (results)
-		*results = data->count;
-
-	if (result == NULL)
-		return 0;
-
-	for (i=0, count=-1; i<sb_qw_server_count; i++)
-	{
-		if (data->checked[i] == true)
-			count++;
-
-		if (count == get_result)
-		{
-			server = sb_qw_server[i];
-			if (result_type == cstc_rt_real)
-				*result = va("%s", NET_AdrToString(&server->addr));
-			else
-				*result = va("%*s %3i/%3i %s", data->map_length, server->map ? server->map : "", server->numplayers, server->maxclients, server->hostname ? server->hostname : "");
-			return 0;
-		}
-	}
-	return 1;
-}
-
-static int cstc_connect_condition(void)
-{
-	if (sb_qw_server == NULL)
-	{
-		SB_Refresh();
-		if (serverscanner)
-			return 1;
-		return 0;
-	}
-	return 1;
-}
-
-static int cstc_connect_get_data(struct cst_info *self, int remove)
-{
-	struct cstc_sbdata *data;
-
-	if ((data = calloc(1, sizeof(*data))))
-	{
-		self->data = (void *)data;
-		return 1;
-	}
-
-	return 0;
-}
-
-static void cstc_connect_draw(struct cst_info *self)
-{
-	const char *s;
-	int x, y, i, j;
-	const struct QWServer *server;
-	struct cstc_sbdata *data;
-
-	if (self->data == NULL)
-		return;
-
-	data = (struct cstc_sbdata *)self->data;
-
-	if (self->selection_changed)
-		self->toggleables[1] = false;
-
-	if (self->toggleables[1] == false)
-		return;
-
-	if (sb_qw_server == NULL)
-		return;
-
-	if (sb_qw_server_count <= self->selection)
-		return;
-
-	for (i=0, j=-1; i<sb_qw_server_count ; i++)
-	{
-		if (data->checked[i] == true)
-			j++;
-		if (j == self->selection)
-			break;
-	}
-
-	if (i == sb_qw_server_count)
-		return;
-
-	server = sb_qw_server[i];
-
-	if (server == NULL)
-		return;
-
-	x = 0;
-	y = self->offset_y + self->direction * 8;
-
-	for (i=0; i<server->numplayers; i++)
-	{
-		s = server->players[i].name;
-		if (s == NULL)
-			continue;
-		Draw_Fill(x, y, strlen(s) *8 + 8, 8, 3);
-		Draw_String(x, y, s);
-		x += 8 + strlen(s) * 8 ;
-	}
-
-	for (i=0; i<server->numspectators; i++)
-	{
-		s = server->spectators[i].name;
-		if (s == NULL)
-			continue;
-		Draw_Fill(x, y, strlen(s) *8 + 8, 8, 0);
-		Draw_String(x, y, s);
-		x += 8 + strlen(s) * 8 ;
-	}
-}
-
 void SB_CvarInit(void)
 {
 	Cmd_AddCommand("sb_activate", &SB_Activate_f);
@@ -3046,6 +2781,8 @@ void SB_CvarInit(void)
 	Cvar_Register(&sb_masterserver);
 	Cvar_Register(&sb_player_drawing);
 	Cvar_Register(&sb_refresh_on_activate);
+	Cvar_Register(&sb_debug);
+	Cvar_Register(&sb_bg_color);
 	Cvar_Register(&sb_color_bg);
 	Cvar_Register(&sb_color_bg_empty);
 	Cvar_Register(&sb_color_bg_free);
@@ -3057,8 +2794,6 @@ void SB_CvarInit(void)
 	Cvar_Register(&sb_highlight_sort_column);
 	Cvar_Register(&sb_highlight_sort_column_color);
 	Cvar_Register(&sb_highlight_sort_column_alpha);
-
-	CSTC_Add("connect", &cstc_connect_condition, &cstc_connect_get_results, &cstc_connect_get_data, &cstc_connect_draw, CSTC_EXECUTE | CSTC_HIGLIGHT_INPUT, "arrow up/down to navigate, ctrl+1 to toggle showing empty servers");
 }
 
 void Dump_SB_Config(FILE *f)

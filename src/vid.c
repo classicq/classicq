@@ -37,7 +37,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "sys_thread.h"
 
 #include "sbar.h"
-#include "context_sensitive_tab.h"
 
 static struct SysMutex *display_mutex;
 
@@ -53,9 +52,14 @@ static int vid_restarted;
 static int mouse_grab_wanted;
 static int mouse_grabbed;
 
+static qboolean conwidth_user_set;
+static qboolean conheight_user_set;
+
 static qboolean vid_conwidth_callback(cvar_t *var, char *value)
 {
 	var->value = Q_atof(value);
+
+	conwidth_user_set = (var->value > 0.5f);
 
 	set_up_conwidth_conheight();
 
@@ -65,6 +69,8 @@ static qboolean vid_conwidth_callback(cvar_t *var, char *value)
 static qboolean vid_conheight_callback(cvar_t *var, char *value)
 {
 	var->value = Q_atof(value);
+
+	conheight_user_set = (var->value > 0.5f);
 
 	set_up_conwidth_conheight();
 
@@ -105,6 +111,10 @@ static void *vid_surfcache;
 
 static void set_up_conwidth_conheight()
 {
+	int N;
+	int auto_w, auto_h;
+	char buf[32];
+
 	if (display)
 	{
 		vid.displaywidth = Sys_Video_GetWidth(display);
@@ -116,43 +126,85 @@ static void set_up_conwidth_conheight()
 		vid.displayheight = 240;
 	}
 
-	if (vid.displaywidth <= 640 || vid.displayheight < 400)
+	// integer multiplier; >=720p uses N >= 2, lower keeps native raster
+	if (vid.displayheight >= 720)
 	{
-		vid.conwidth = vid.displaywidth;
-		vid.conheight = vid.displayheight;
+		N = ((int)vid.displayheight + 180) / 360;
+		if (N < 2)
+			N = 2;
+		auto_w = (int)vid.displaywidth / N;
+		auto_h = (int)vid.displayheight / N;
 	}
 	else
 	{
-		vid.conwidth = vid.displaywidth/2;
-		vid.conheight = vid.displayheight/2;
+		auto_w = (int)vid.displaywidth;
+		auto_h = (int)vid.displayheight;
 	}
 
-	if (vid_conwidth.value)
+	if (conwidth_user_set)
 	{
-		vid.conwidth = vid_conwidth.value;
-
-		vid.conwidth &= 0xfff8; // make it a multiple of eight
-
+		vid.conwidth = (int)vid_conwidth.value;
+		vid.conwidth &= ~7;
 		if (vid.conwidth < 320)
 			vid.conwidth = 320;
-
-		// pick a conheight that matches with correct aspect
-		vid.conheight = vid.conwidth * 3 / 4;
+	}
+	else
+	{
+		vid.conwidth = auto_w;
 	}
 
-	if (vid_conheight.value)
+	if (conheight_user_set)
 	{
-		vid.conheight = vid_conheight.value;
-
+		vid.conheight = (int)vid_conheight.value;
 		if (vid.conheight < 200)
 			vid.conheight = 200;
 	}
+	else if (conwidth_user_set)
+	{
+		vid.conheight = vid.conwidth * (int)vid.displayheight / (int)vid.displaywidth;
+	}
+	else
+	{
+		vid.conheight = auto_h;
+	}
 
-	if (vid.conwidth > vid.displaywidth)
-		vid.conwidth = vid.displaywidth;
-	
-	if (vid.conheight > vid.displayheight)
-		vid.conheight = vid.displayheight;
+	if (vid.conwidth > (int)vid.displaywidth)
+		vid.conwidth = (int)vid.displaywidth;
+
+	if (vid.conheight > (int)vid.displayheight)
+		vid.conheight = (int)vid.displayheight;
+
+	// store applied auto values as cvar defaultvalue so cfg_save skips them
+	if (!conwidth_user_set)
+	{
+		snprintf(buf, sizeof(buf), "%d", vid.conwidth);
+		if (strcmp(vid_conwidth.string, buf) != 0)
+		{
+			Z_Free(vid_conwidth.string);
+			vid_conwidth.string = CopyString(buf);
+			vid_conwidth.value = (float)vid.conwidth;
+		}
+		if (strcmp(vid_conwidth.defaultvalue, buf) != 0)
+		{
+			Z_Free(vid_conwidth.defaultvalue);
+			vid_conwidth.defaultvalue = CopyString(buf);
+		}
+	}
+	if (!conheight_user_set)
+	{
+		snprintf(buf, sizeof(buf), "%d", vid.conheight);
+		if (strcmp(vid_conheight.string, buf) != 0)
+		{
+			Z_Free(vid_conheight.string);
+			vid_conheight.string = CopyString(buf);
+			vid_conheight.value = (float)vid.conheight;
+		}
+		if (strcmp(vid_conheight.defaultvalue, buf) != 0)
+		{
+			Z_Free(vid_conheight.defaultvalue);
+			vid_conheight.defaultvalue = CopyString(buf);
+		}
+	}
 
 	vid.recalc_refdef = 1;
 }
@@ -213,7 +265,7 @@ void VID_Restart(void)
 
 	VID_Close();
 	VID_Open();
-	
+
 	for(i=1;i < MAX_MODELS;i++)
 	{
 		if (cl.model_name[i][0] == 0)
@@ -373,7 +425,6 @@ void VID_Open()
 			M_VidInit();
 			Sbar_Init();
 			SCR_Init();
-			CSTC_PictureInit();
 			Skin_Init();
 
 			return;
@@ -405,7 +456,6 @@ void VID_Close()
 	Sbar_Shutdown();
 	M_VidShutdown();
 	Draw_Shutdown();
-	CSTC_PictureShutdown();
 
 	if (display)
 	{

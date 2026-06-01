@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static void Mod_LoadSpriteModel (model_t *mod, void *buffer);
 static void Mod_LoadBrushModel (model_t *mod, void *buffer);
+static void *Mod_BSPX_FindLump(bspx_header_t *bspx, const char *name, int *plumpsize, byte *mod_base);
 static void Mod_LoadAliasModel (model_t *mod, void *buffer);
 
 byte	mod_novis[MAX_MAP_LEAFS/8];
@@ -435,7 +436,8 @@ qboolean Img_HasFullbrights (byte *pixels, int size)
 
 #define ISSKYTEX(name)		((name)[0] == 's' && (name)[1] == 'k' && (name)[2] == 'y')
 
-#define ISALPHATEX(model, name)	((model)->bspversion == HL_BSPVERSION && (name)[0] == '{')
+// '{' prefix = fence-style texture (palette 255 = transparent), all Q1 BSPs
+#define ISALPHATEX(model, name)	((name)[0] == '{')
 
 byte	*mod_base;
 
@@ -525,6 +527,10 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 
 	m = (dmiptexlump_t *) (mod_base + l->fileofs);
 	m->nummiptex = LittleLong (m->nummiptex);
+
+	if (m->nummiptex < 0 || m->nummiptex > 4096)
+		Host_Error ("Mod_LoadTextures: bogus nummiptex %d in %s", m->nummiptex, model->name);
+
 	model->numtextures = m->nummiptex;
 
 	if (m->nummiptex)
@@ -561,14 +567,14 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 		if (!tx->name[0])
 		{
 			snprintf(tx->name, sizeof(tx->name), "unnamed%d", i);
-			Com_DPrintf("Warning: unnamed texture in %s, renaming to %s\n", model->name, tx->name);
+			Com_DPrintf("Warning: unnamed texture in %s, renaming to %.16s\n", model->name, tx->name);
 		}
 
 		tx->width = mt->width = LittleLong (mt->width);
 		tx->height = mt->height = LittleLong (mt->height);
 
 		if ((mt->width & 15) || (mt->height & 15))
-			Host_Error ("Mod_LoadTextures: Texture %s is not 16 aligned", mt->name);
+			Host_Error ("Mod_LoadTextures: Texture %.16s is not 16 aligned", mt->name);
 
 		if (!nodata)
 		{
@@ -684,7 +690,8 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 			}
 			data = freethis;
 		}
-		tx->gl_texturenum = GL_LoadTexture (texname, width, height, data, texmode | brighten_flag, 1);
+		alpha_flag = ISALPHATEX(model, tx->name) ? TEX_ALPHA : 0;
+		tx->gl_texturenum = GL_LoadTexture (texname, width, height, data, texmode | brighten_flag | alpha_flag, 1);
 		if (!ISTURBTEX(model, tx->name) && Img_HasFullbrights(data, width * height))
 			tx->fb_texturenum = GL_LoadTexture (va("@fb_%s", texname), width, height, data, texmode | TEX_FULLBRIGHT, 1);
 
@@ -724,7 +731,7 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 		}
 		else
 		{
-			Host_Error ("Mod_LoadTextures: Bad animating texture %s", tx->name);
+			Host_Error ("Mod_LoadTextures: Bad animating texture %.16s", tx->name);
 		}
 
 		for (j = i + 1; j < m->nummiptex; j++)
@@ -754,7 +761,7 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 			}
 			else
 			{
-				Host_Error ("Mod_LoadTextures: Bad animating texture %s", tx->name);
+				Host_Error ("Mod_LoadTextures: Bad animating texture %.16s", tx->name);
 			}
 		}
 
@@ -764,7 +771,7 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 		{
 			tx2 = anims[j];
 			if (!tx2)
-				Host_Error ("Mod_LoadTextures: Missing frame %i of %s",j, tx->name);
+				Host_Error ("Mod_LoadTextures: Missing frame %i of %.16s",j, tx->name);
 			tx2->anim_total = max * ANIM_CYCLE;
 			tx2->anim_min = j * ANIM_CYCLE;
 			tx2->anim_max = (j + 1) * ANIM_CYCLE;
@@ -776,7 +783,7 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 		{
 			tx2 = altanims[j];
 			if (!tx2)
-				Host_Error ("Mod_LoadTextures: Missing frame %i of %s",j, tx->name);
+				Host_Error ("Mod_LoadTextures: Missing frame %i of %.16s",j, tx->name);
 			tx2->anim_total = altmax * ANIM_CYCLE;
 			tx2->anim_min = j * ANIM_CYCLE;
 			tx2->anim_max = (j + 1) * ANIM_CYCLE;
@@ -870,12 +877,13 @@ static byte *LoadColoredLighting(char *name, char **litfilename, int *litlength)
 	return data;
 }
 
-static void Mod_LoadLighting(model_t *model, lump_t *l)
+static void Mod_LoadLighting(model_t *model, lump_t *l, bspx_header_t *bspx)
 {
 	int i, b;
 	byte *in, *out, *data, d;
 	char *litfilename;
 	int litlength;
+	const char *source = NULL;
 
 	model->lightdata = NULL;
 	if (!l->filelen)
@@ -892,46 +900,63 @@ static void Mod_LoadLighting(model_t *model, lump_t *l)
 		return;
 	}
 
-	//check for a .lit file
+	//check for a .lit file (highest priority for backwards compat)
 	data = LoadColoredLighting(model->name, &litfilename, &litlength);
+	if (data && l->filelen * 3 != litlength)
+	{
+		Com_Printf("Warning: .lit file (%s) has incorrect size\n", COM_SkipPath(litfilename));
+		free(data);
+		data = NULL;
+	}
 	if (data)
 	{
-		if (l->filelen * 3 != litlength)
-		{
-			Com_Printf("Warning: .lit file (%s) has incorrect size\n", COM_SkipPath(litfilename));
-		}
-		else
-		{
-			if (developer.value || cl_warncmd.value)
-				Com_Printf("Static coloured lighting loaded\n");
-
-			model->lightdata = data;
-
-			in = mod_base + l->fileofs;
-			out = model->lightdata;
-			for (i = 0; i < l->filelen; i++)
-			{
-				b = max(out[3 * i], max(out[3 * i + 1], out[3 * i + 2]));
-
-				if (!b)
-				{
-					out[3 * i] = out[3 * i + 1] = out[3 * i + 2] = in[i];
-				}
-				else
-				{
-					float r = in[i] / (float) b;
-					out[3 *i + 0] = (int) (r * out[3 * i + 0]);
-					out[3 *i + 1] = (int) (r * out[3 * i + 1]);
-					out[3 *i + 2] = (int) (r * out[3 * i + 2]);
-				}
-			}
-
-			return;
-		}
-
-		free(data);
+		source = ".lit";
 	}
-	//no .lit found, expand the white lighting data to color
+	else
+	{
+		//check for inline RGBLIGHTING in BSPX
+		int bspxsize;
+		byte *bspxdata = Mod_BSPX_FindLump(bspx, "RGBLIGHTING", &bspxsize, mod_base);
+		if (bspxdata && bspxsize == l->filelen * 3)
+		{
+			data = malloc(bspxsize);
+			if (data == 0)
+				Sys_Error("Mod_LoadLighting: Out of memory\n");
+			memcpy(data, bspxdata, bspxsize);
+			source = "BSPX RGBLIGHTING";
+		}
+	}
+
+	if (data)
+	{
+		if (developer.value || cl_warncmd.value)
+			Com_Printf("Static coloured lighting loaded (%s)\n", source);
+
+		model->lightdata = data;
+
+		in = mod_base + l->fileofs;
+		out = model->lightdata;
+		for (i = 0; i < l->filelen; i++)
+		{
+			b = max(out[3 * i], max(out[3 * i + 1], out[3 * i + 2]));
+
+			if (!b)
+			{
+				out[3 * i] = out[3 * i + 1] = out[3 * i + 2] = in[i];
+			}
+			else
+			{
+				float r = in[i] / (float) b;
+				out[3 *i + 0] = (int) (r * out[3 * i + 0]);
+				out[3 *i + 1] = (int) (r * out[3 * i + 1]);
+				out[3 *i + 2] = (int) (r * out[3 * i + 2]);
+			}
+		}
+
+		return;
+	}
+
+	//no colored lighting available, expand the white lighting data to gray RGB
 	model->lightdata = malloc(l->filelen * 3);
 	if (model->lightdata == 0)
 		Sys_Error("Mod_LoadLighting: Out of memory\n");
@@ -1134,6 +1159,30 @@ static void Mod_LoadEdges(model_t *model, lump_t *l)
 	}
 }
 
+static void Mod_LoadEdgesBSP2(model_t *model, lump_t *l)
+{
+	dedge29a_t *in;
+	medge_t *out;
+	int i, count;
+
+	in = (void *)(mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadEdgesBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+	out = malloc((count + 1) * sizeof(*out));
+	if (out == 0)
+		Sys_Error("Mod_LoadEdgesBSP2: Out of memory\n");
+
+	model->edges = out;
+	model->numedges = count;
+
+	for (i = 0; i < count; i++, in++, out++)
+	{
+		out->v[0] = LittleLong(in->v[0]);
+		out->v[1] = LittleLong(in->v[1]);
+	}
+}
+
 static void Mod_LoadTexinfo(model_t *model, lump_t *l)
 {
 	texinfo_t *in;
@@ -1320,6 +1369,86 @@ static void Mod_LoadFaces(model_t *model, lump_t *l)
 	}
 }
 
+static void Mod_LoadFacesBSP2(model_t *model, lump_t *l)
+{
+	dface29a_t *in;
+	msurface_t *out;
+	int i, count, surfnum, planenum, side;
+	unsigned char flags;
+
+	in = (void *)(mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadFacesBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+
+	out = malloc(count*sizeof(*out));
+	model->surfvisibleunaligned = malloc((((count+31)/32)*sizeof(*model->surfvisibleunaligned)) + 127);
+	model->surfflags = malloc(count*sizeof(*model->surfflags));
+	if (out == 0 || model->surfvisibleunaligned == 0 || model->surfflags == 0)
+		Sys_Error("Mod_LoadFacesBSP2: Out of memory\n");
+
+	memset(out, 0, count*sizeof(*out));
+	memset(model->surfflags, 0, count*sizeof(*model->surfflags));
+
+	model->surfvisible = (void *)((((uintptr_t)model->surfvisibleunaligned)+127)&~127);
+
+	model->surfaces = out;
+	model->numsurfaces = count;
+
+	for (surfnum = 0; surfnum < count; surfnum++, in++, out++)
+	{
+		flags = 0;
+
+		out->firstedge = LittleLong(in->firstedge);
+		out->numedges = LittleLong(in->numedges);
+
+		planenum = LittleLong(in->planenum);
+		side = LittleLong(in->side);
+		if (side)
+			flags |= SURF_PLANEBACK;
+
+		out->plane = model->planes + planenum;
+
+		out->texinfo = model->texinfo + LittleLong(in->texinfo);
+
+		CalcSurfaceExtents(model, out);
+
+		for (i = 0; i < MAXLIGHTMAPS; i++)
+			out->styles[i] = in->styles[i];
+		i = LittleLong(in->lightofs);
+		if (i == -1)
+			out->samples = NULL;
+		else
+			out->samples = model->lightdata + i * 3;
+
+		if (ISSKYTEX(out->texinfo->texture->name))
+		{
+			flags |= (SURF_DRAWSKY | SURF_DRAWTILED);
+			GL_SubdivideSurface(model, out);
+			model->surfflags[surfnum] = flags;
+			continue;
+		}
+
+		if (ISTURBTEX(model, out->texinfo->texture->name))
+		{
+			flags |= (SURF_DRAWTURB | SURF_DRAWTILED);
+			for (i = 0; i < 2; i++)
+			{
+				out->extents[i] = 16384;
+				out->texturemins[i] = -8192;
+			}
+			GL_SubdivideSurface(model, out);
+			model->surfflags[surfnum] = flags;
+			continue;
+		}
+
+		if (ISALPHATEX(model, out->texinfo->texture->name))
+			flags |= SURF_DRAWALPHA;
+
+		model->surfflags[surfnum] = flags;
+	}
+}
+
 static void Mod_SetParent(model_t *model, unsigned int nodenum, unsigned int parentnum)
 {
 	mnode_t *node;
@@ -1377,7 +1506,53 @@ static void Mod_LoadNodes(model_t *model, lump_t *l)
 		}
 	}
 
-	Mod_SetParent(model, 0, 0xffff);	// sets nodes and leafs
+	Mod_SetParent(model, 0, 0xffffffff);	// sets nodes and leafs
+}
+
+static void Mod_LoadNodesBSP2(model_t *model, lump_t *l)
+{
+	int i, j, count, p;
+	dnode_bsp2_t *in;
+	mnode_t *out;
+
+	in = (void *) (mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadNodesBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+	out = malloc(count * sizeof(*out));
+	if (out == 0)
+		Sys_Error("Mod_LoadNodesBSP2: Out of memory\n");
+
+	memset(out, 0, count * sizeof(*out));
+
+	model->nodes = out;
+	model->numnodes = count;
+
+	for (i = 0; i < count; i++, in++, out++)
+	{
+		for (j = 0; j < 3; j++)
+		{
+			out->minmaxs[j] = LittleFloat(in->mins[j]);
+			out->minmaxs[3 + j] = LittleFloat(in->maxs[j]);
+		}
+
+		p = LittleLong(in->planenum);
+		out->planenum = p;
+
+		out->firstsurface = LittleLong(in->firstface);
+		out->numsurfaces = LittleLong(in->numfaces);
+
+		for (j = 0; j < 2; j++)
+		{
+			p = LittleLong(in->children[j]);
+			if (p >= 0)
+				out->childrennum[j] = p;
+			else
+				out->childrennum[j] = model->numnodes + (-1 - p);
+		}
+	}
+
+	Mod_SetParent(model, 0, 0xffffffff);	// sets nodes and leafs
 }
 
 static void Mod_LoadLeafs(model_t *model, lump_t *l)
@@ -1435,9 +1610,65 @@ static void Mod_LoadLeafs(model_t *model, lump_t *l)
 	}
 }
 
+static void Mod_LoadLeafsBSP2(model_t *model, lump_t *l)
+{
+	dleaf_bsp2_t *in;
+	mleaf_t *out;
+	unsigned int i;
+	int j, count, p;
+
+	in = (void *)(mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadLeafsBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+	out = malloc(count*sizeof(*out));
+	model->leafsolidunaligned = malloc((((count+31)/32)*sizeof(*model->leafsolidunaligned)) + 127);
+	if (out == 0 || model->leafsolidunaligned == 0)
+		Sys_Error("Mod_LoadLeafsBSP2: Out of memory\n");
+
+	memset(out, 0, count*sizeof(*out));
+
+	model->leafsolid = (void *)((((uintptr_t)model->leafsolidunaligned)+127)&~127);
+	memset(model->leafsolid, 0, ((count+31)/32)*sizeof(*model->leafsolid));
+
+	model->leafs = out;
+	model->numleafs = count;
+	for (i = 0; i < count; i++, in++, out++)
+	{
+		for (j = 0; j < 3; j++)
+		{
+			out->minmaxs[j] = LittleFloat(in->mins[j]);
+			out->minmaxs[3 + j] = LittleFloat(in->maxs[j]);
+		}
+
+		p = LittleLong(in->contents);
+		out->contents = p;
+
+		if (p == CONTENTS_SOLID)
+			model->leafsolid[i/32] |= (1<<(i%32));
+
+		out->firstmarksurfacenum = LittleLong(in->firstmarksurface);
+		out->nummarksurfaces = LittleLong(in->nummarksurfaces);
+
+		p = LittleLong(in->visofs);
+		out->compressed_vis = (p == -1) ? NULL : model->visdata + p;
+		out->efrags = NULL;
+
+		for (j = 0; j < 4; j++)
+			out->ambient_sound_level[j] = in->ambient_level[j];
+
+		if (!dedicated && out->contents != CONTENTS_EMPTY)
+		{
+			for (j = 0; j < out->nummarksurfaces; j++)
+				model->surfflags[model->marksurfaces[out->firstmarksurfacenum + j]] |= SURF_UNDERWATER;
+		}
+	}
+}
+
 static void Mod_LoadClipnodes(model_t *model, lump_t *l)
 {
-	dclipnode_t *in, *out;
+	dclipnode_t *in;
+	mclipnode_t *out;
 	int i, count;
 	hull_t *hull;
 
@@ -1525,11 +1756,62 @@ static void Mod_LoadClipnodes(model_t *model, lump_t *l)
 	}
 }
 
+static void Mod_LoadClipnodesBSP2(model_t *model, lump_t *l)
+{
+	dclipnode29a_t *in;
+	mclipnode_t *out;
+	int i, count;
+	hull_t *hull;
+
+	in = (void *)(mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadClipnodesBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+	out = malloc(count*sizeof(*out));
+	if (out == 0)
+		Sys_Error("Mod_LoadClipnodesBSP2: Out of memory\n");
+
+	model->clipnodes = out;
+	model->numclipnodes = count;
+
+	// BSP2 has no HL variant; hull dimensions follow vanilla Q1 values.
+	hull = &model->hulls[1];
+	hull->clipnodes = out;
+	hull->firstclipnode = 0;
+	hull->lastclipnode = count-1;
+	hull->planes = model->planes;
+	hull->clip_mins[0] = -16;
+	hull->clip_mins[1] = -16;
+	hull->clip_mins[2] = -24;
+	hull->clip_maxs[0] = 16;
+	hull->clip_maxs[1] = 16;
+	hull->clip_maxs[2] = 32;
+
+	hull = &model->hulls[2];
+	hull->clipnodes = out;
+	hull->firstclipnode = 0;
+	hull->lastclipnode = count-1;
+	hull->planes = model->planes;
+	hull->clip_mins[0] = -32;
+	hull->clip_mins[1] = -32;
+	hull->clip_mins[2] = -24;
+	hull->clip_maxs[0] = 32;
+	hull->clip_maxs[1] = 32;
+	hull->clip_maxs[2] = 64;
+
+	for (i = 0; i < count; i++, out++, in++)
+	{
+		out->planenum = LittleLong(in->planenum);
+		out->children[0] = LittleLong(in->children[0]);
+		out->children[1] = LittleLong(in->children[1]);
+	}
+}
+
 //Deplicate the drawing hull structure as a clipping hull
 static void Mod_MakeHull0(model_t *model)
 {
 	mnode_t *in, *child;
-	dclipnode_t *out;
+	mclipnode_t *out;
 	int i, j, count;
 	hull_t *hull;
 
@@ -1564,7 +1846,7 @@ static void Mod_LoadMarksurfaces(model_t *model, lump_t *l)
 {
 	int i, j, count;
 	short *in;
-	unsigned short *out;
+	unsigned int *out;
 
 	in = (void *)(mod_base + l->fileofs);
 	if (l->filelen % sizeof(*in))
@@ -1579,9 +1861,35 @@ static void Mod_LoadMarksurfaces(model_t *model, lump_t *l)
 
 	for (i = 0; i < count; i++)
 	{
-		j = LittleShort(in[i]);
+		j = (unsigned short)LittleShort(in[i]);
 		if (j >= model->numsurfaces)
 			Host_Error ("Mod_LoadMarksurfaces: bad surface number");
+		out[i] = j;
+	}
+}
+
+static void Mod_LoadMarksurfacesBSP2(model_t *model, lump_t *l)
+{
+	int i, j, count;
+	unsigned int *in;
+	unsigned int *out;
+
+	in = (void *)(mod_base + l->fileofs);
+	if (l->filelen % sizeof(*in))
+		Host_Error ("Mod_LoadMarksurfacesBSP2: funny lump size in %s", model->name);
+	count = l->filelen / sizeof(*in);
+	out = malloc(count*sizeof(*out));
+	if (out == 0)
+		Sys_Error("Mod_LoadMarksurfacesBSP2: Out of memory\n");
+
+	model->marksurfaces = out;
+	model->nummarksurfaces = count;
+
+	for (i = 0; i < count; i++)
+	{
+		j = LittleLong(in[i]);
+		if (j < 0 || j >= model->numsurfaces)
+			Host_Error ("Mod_LoadMarksurfacesBSP2: bad surface number");
 		out[i] = j;
 	}
 }
@@ -1653,6 +1961,73 @@ static float RadiusFromBounds(vec3_t mins, vec3_t maxs)
 	return VectorLength (corner);
 }
 
+// Returns a pointer into mod_base for a named BSPX lump (or NULL).
+static void *Mod_BSPX_FindLump(bspx_header_t *bspx, const char *name, int *plumpsize, byte *mod_base)
+{
+	int i;
+	bspx_lump_t *lump;
+
+	if (!bspx)
+		return NULL;
+
+	lump = (bspx_lump_t *)(bspx + 1);
+	for (i = 0; i < bspx->numlumps; i++, lump++)
+	{
+		if (!strcmp(lump->lumpname, name))
+		{
+			if (plumpsize)
+				*plumpsize = lump->filelen;
+			return mod_base + lump->fileofs;
+		}
+	}
+
+	return NULL;
+}
+
+// Locate BSPX header past last BSP lump (pointer into mod_base, not heap)
+static bspx_header_t *Mod_LoadBSPX(int filesize, byte *mod_base)
+{
+	dheader_t *header;
+	bspx_header_t *xheader;
+	bspx_lump_t *lump;
+	int i, xofs;
+
+	header = (dheader_t *)mod_base;
+
+	xofs = 0;
+	for (i = 0; i < HEADER_LUMPS; i++)
+	{
+		int end = header->lumps[i].fileofs + header->lumps[i].filelen;
+		if (end > xofs)
+			xofs = end;
+	}
+
+	if (xofs + (int)sizeof(bspx_header_t) > filesize)
+		return NULL;
+
+	xheader = (bspx_header_t *)(mod_base + xofs);
+	if (memcmp(xheader->id, "BSPX", 4) != 0)
+		return NULL;
+
+	xheader->numlumps = LittleLong(xheader->numlumps);
+	if (xheader->numlumps < 0
+	 || xofs + (int)sizeof(bspx_header_t) + xheader->numlumps * (int)sizeof(bspx_lump_t) > filesize)
+		return NULL;
+
+	lump = (bspx_lump_t *)(xheader + 1);
+	for (i = 0; i < xheader->numlumps; i++, lump++)
+	{
+		lump->lumpname[sizeof(lump->lumpname) - 1] = '\0';
+		lump->fileofs = LittleLong(lump->fileofs);
+		lump->filelen = LittleLong(lump->filelen);
+		if (lump->fileofs < 0 || lump->filelen < 0
+		 || (unsigned)(lump->fileofs + lump->filelen) > (unsigned)filesize)
+			return NULL;
+	}
+
+	return xheader;
+}
+
 static void Mod_LoadBrushModel (model_t *mod, void *buffer)
 {
 	int i, j;
@@ -1661,6 +2036,7 @@ static void Mod_LoadBrushModel (model_t *mod, void *buffer)
 	dmodel_t *subdmodels;
 	model_t *nextmodel;
 	model_t *mainmodel;
+	bspx_header_t *bspx;
 	unsigned int checksumvalue;
 
 	mod->type = mod_brush;
@@ -1669,8 +2045,9 @@ static void Mod_LoadBrushModel (model_t *mod, void *buffer)
 
 	mod->bspversion = LittleLong (header->version);
 
-	if (mod->bspversion != Q1_BSPVERSION && mod->bspversion != HL_BSPVERSION)
-		Host_Error ("Mod_LoadBrushModel: %s has wrong version number (%i should be %i (Quake) or %i (HalfLife))", mod->name, mod->bspversion, Q1_BSPVERSION, HL_BSPVERSION);
+	if (mod->bspversion != Q1_BSPVERSION && mod->bspversion != HL_BSPVERSION
+	 && mod->bspversion != Q1_BSPVERSION2)
+		Host_Error ("Mod_LoadBrushModel: %s has wrong version number (%i should be %i (Quake), %i (HalfLife) or %i (BSP2))", mod->name, mod->bspversion, Q1_BSPVERSION, HL_BSPVERSION, Q1_BSPVERSION2);
 
 	mod->isworldmodel = !strcmp(mod->name, va("maps/%s.bsp", mapname.string));
 
@@ -1687,6 +2064,36 @@ static void Mod_LoadBrushModel (model_t *mod, void *buffer)
 
 	for (i = 0; i < sizeof(dheader_t) / 4; i++)
 		((int *) header)[i] = LittleLong (((int *) header)[i]);
+
+	bspx = Mod_LoadBSPX(com_filesize, mod_base);
+	if (bspx)
+	{
+		bspx_lump_t *lump = (bspx_lump_t *)(bspx + 1);
+		Com_DPrintf("BSPX header in %s: %d lumps\n", mod->name, bspx->numlumps);
+		for (j = 0; j < bspx->numlumps; j++, lump++)
+			Com_DPrintf("  [%d] %s (%d bytes)\n", j, lump->lumpname, lump->filelen);
+	}
+
+	if (mod->isworldmodel)
+	{
+		const char *bspformat;
+		if (mod->bspversion == Q1_BSPVERSION)
+			bspformat = "BSP29";
+		else if (mod->bspversion == HL_BSPVERSION)
+			bspformat = "BSP30 (HalfLife)";
+		else if (mod->bspversion == Q1_BSPVERSION2)
+			bspformat = "BSP2";
+		else if (mod->bspversion == Q1_BSPVERSION29a)
+			bspformat = "2PSB";
+		else
+			bspformat = "unknown";
+
+		if (bspx)
+			Com_Printf("%s: %s + BSPX (%d lump%s)\n", mod->name, bspformat,
+			           bspx->numlumps, bspx->numlumps == 1 ? "" : "s");
+		else
+			Com_Printf("%s: %s\n", mod->name, bspformat);
+	}
 
 	// checksum all of the map, except for entities
 	mod->checksum = 0;
@@ -1713,22 +2120,42 @@ static void Mod_LoadBrushModel (model_t *mod, void *buffer)
 	if (!dedicated)
 	{
 		Mod_LoadVertexes(mod, &header->lumps[LUMP_VERTEXES]);
-		Mod_LoadEdges(mod, &header->lumps[LUMP_EDGES]);
+		if (mod->bspversion == Q1_BSPVERSION2)
+			Mod_LoadEdgesBSP2(mod, &header->lumps[LUMP_EDGES]);
+		else
+			Mod_LoadEdges(mod, &header->lumps[LUMP_EDGES]);
 		Mod_LoadSurfedges(mod, &header->lumps[LUMP_SURFEDGES]);
 		Mod_LoadTextures(mod, &header->lumps[LUMP_TEXTURES]);
-		Mod_LoadLighting(mod, &header->lumps[LUMP_LIGHTING]);
+		Mod_LoadLighting(mod, &header->lumps[LUMP_LIGHTING], bspx);
 	}
 	Mod_LoadPlanes(mod, &header->lumps[LUMP_PLANES]);
 	if (!dedicated)
 	{
 		Mod_LoadTexinfo(mod, &header->lumps[LUMP_TEXINFO]);
-		Mod_LoadFaces(mod, &header->lumps[LUMP_FACES]);
-		Mod_LoadMarksurfaces(mod, &header->lumps[LUMP_MARKSURFACES]);
+		if (mod->bspversion == Q1_BSPVERSION2)
+		{
+			Mod_LoadFacesBSP2(mod, &header->lumps[LUMP_FACES]);
+			Mod_LoadMarksurfacesBSP2(mod, &header->lumps[LUMP_MARKSURFACES]);
+		}
+		else
+		{
+			Mod_LoadFaces(mod, &header->lumps[LUMP_FACES]);
+			Mod_LoadMarksurfaces(mod, &header->lumps[LUMP_MARKSURFACES]);
+		}
 	}
 	Mod_LoadVisibility(mod, &header->lumps[LUMP_VISIBILITY]);
-	Mod_LoadLeafs(mod, &header->lumps[LUMP_LEAFS]);
-	Mod_LoadNodes(mod, &header->lumps[LUMP_NODES]);
-	Mod_LoadClipnodes(mod, &header->lumps[LUMP_CLIPNODES]);
+	if (mod->bspversion == Q1_BSPVERSION2)
+	{
+		Mod_LoadLeafsBSP2(mod, &header->lumps[LUMP_LEAFS]);
+		Mod_LoadNodesBSP2(mod, &header->lumps[LUMP_NODES]);
+		Mod_LoadClipnodesBSP2(mod, &header->lumps[LUMP_CLIPNODES]);
+	}
+	else
+	{
+		Mod_LoadLeafs(mod, &header->lumps[LUMP_LEAFS]);
+		Mod_LoadNodes(mod, &header->lumps[LUMP_NODES]);
+		Mod_LoadClipnodes(mod, &header->lumps[LUMP_CLIPNODES]);
+	}
 	subdmodels = Mod_LoadSubmodels(mod, &header->lumps[LUMP_MODELS]);
 
 	Mod_MakeHull0(mod);

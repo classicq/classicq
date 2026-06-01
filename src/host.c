@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>
 #include <locale.h>
 
+#include <SDL.h>
+
 #include "quakedef.h"
 #include "pmove.h"
 #include "version.h"
@@ -54,7 +56,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <setjmp.h>
 #include "server_browser.h"
 #include "ruleset.h"
-#include "context_sensitive_tab.h"
 #include "lua.h"
 
 #ifndef CLIENTONLY
@@ -245,13 +246,25 @@ void Host_Init(int argc, char **argv)
 	SB_CvarInit();
 	Lua_CvarInit();
 	Ruleset_CvarInit();
-	Context_Sensitive_Tab_Completion_CvarInit();
 
 	cvarsregged = 1;
 
 	Con_Init ();
 
 	FS_InitFilesystem();
+
+	if (!dedicated && (!FS_FileExists("gfx/palette.lmp") || !FS_FileExists("gfx/pop.lmp")))
+	{
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+			"classicQ - missing game data",
+			"classicQ requires pak0.pak and pak1.pak from a licensed,\n"
+			"registered copy of Quake 1.\n\n"
+			"Place both files in the id1/ directory next to the\n"
+			"executable. Filenames must be lowercase.",
+			NULL);
+		Sys_Error("Missing id1/pak0.pak or id1/pak1.pak");
+	}
+
 	COM_CheckRegistered();
 
 	Con_Suppress();
@@ -302,8 +315,6 @@ void Host_Init(int argc, char **argv)
 #endif
 	CL_Init();
 
-	Context_Weighting_Init();
-
 #ifndef SERVERONLY
 	if (!dedicated)
 		CL_SaveArgv(argc, argv);
@@ -315,7 +326,7 @@ void Host_Init(int argc, char **argv)
 
 	Com_Printf("Exe: "__TIME__" "__DATE__"\n");
 
-	Com_Printf("\nFodquake version %s\n\n", VersionString());
+	Com_Printf("\nclassicQ v%s\n\n", VersionString());
 
 	if (dedicated)
 	{
@@ -342,8 +353,6 @@ void Host_Shutdown(void)
 	}
 	isdown = true;
 
-	Context_Weighting_Shutdown();
-
 	SB_Quit();
 	Lua_Shutdown();
 #ifndef CLIENTONLY
@@ -363,7 +372,6 @@ void Host_Shutdown(void)
 	Cvar_Shutdown();
 	Cmd_Shutdown();
 	Cbuf_Shutdown();
-	CSTC_Shutdown();
 
 	Host_ShutdownMemory();
 }

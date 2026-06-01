@@ -1151,7 +1151,149 @@ static void *Draw_8to32(unsigned char *source, unsigned int width, unsigned int 
 }
 
 #define ISPOT(x) (((x) & -(x)) == (x))
-#define NPOT(x) ({ unsigned int v = (x); v--; v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16; v++; v; })
+
+static inline unsigned int NPOT(unsigned int x)
+{
+	x--;
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+	x |= x >> 8;
+	x |= x >> 16;
+	x++;
+	return x;
+}
+
+struct Picture *Draw_BuildTranslatedMenuplyr(int top, int bottom)
+{
+	static struct Picture pic;
+	static byte src[8192];
+	static unsigned int src_w, src_h;
+	static int src_state;	/* 0 = untried, 1 = loaded, -1 = missing */
+	static int top_cache = -1;
+	static int bottom_cache = -1;
+
+	byte trans[256];
+	byte rgba[8192 * 4];
+	unsigned int i, n;
+
+	if (src_state == 0)
+	{
+		FILE *fh;
+		void *data;
+		unsigned int w = 0, h = 0;
+
+		if (FS_FOpenFile("gfx/menuplyr.lmp", &fh) != -1)
+		{
+			data = Draw_LoadLmpPicture(fh, &w, &h);
+			fclose(fh);
+
+			if (data && w > 0 && h > 0 && (unsigned int)(w * h) <= sizeof(src))
+			{
+				memcpy(src, data, w * h);
+				src_w = w;
+				src_h = h;
+				src_state = 1;
+			}
+			else
+			{
+				src_state = -1;
+			}
+
+			if (data)
+				free(data);
+		}
+		else
+		{
+			src_state = -1;
+		}
+	}
+
+	if (src_state < 0)
+		return 0;
+
+	// rebuild texture if GL context was torn down by vid_restart
+	if (pic.texnum != 0 && !glIsTexture(pic.texnum))
+	{
+		pic.texnum = 0;
+		top_cache = -1;
+		bottom_cache = -1;
+	}
+
+	if (pic.texnum != 0 && top == top_cache && bottom == bottom_cache)
+		return &pic;
+
+	for (i = 0; i < 256; i++)
+		trans[i] = (byte)i;
+
+	if (top < 128)
+	{
+		for (i = 0; i < 16; i++)
+			trans[16 + i] = (byte)(top + i);
+	}
+	else
+	{
+		// id palette skin ranges run backwards; mirror for slider direction
+		for (i = 0; i < 16; i++)
+			trans[16 + i] = (byte)(top + 15 - i);
+	}
+
+	if (bottom < 128)
+	{
+		for (i = 0; i < 16; i++)
+			trans[96 + i] = (byte)(bottom + i);
+	}
+	else
+	{
+		for (i = 0; i < 16; i++)
+			trans[96 + i] = (byte)(bottom + 15 - i);
+	}
+
+	n = src_w * src_h;
+	for (i = 0; i < n; i++)
+	{
+		byte t = trans[src[i]];
+
+		if (t == 255)
+		{
+			rgba[i * 4 + 0] = 0;
+			rgba[i * 4 + 1] = 0;
+			rgba[i * 4 + 2] = 0;
+			rgba[i * 4 + 3] = 0;
+		}
+		else
+		{
+			rgba[i * 4 + 0] = host_basepal[t * 3 + 0];
+			rgba[i * 4 + 1] = host_basepal[t * 3 + 1];
+			rgba[i * 4 + 2] = host_basepal[t * 3 + 2];
+			rgba[i * 4 + 3] = 255;
+		}
+	}
+
+	if (pic.texnum == 0)
+		pic.texnum = texture_extension_number++;
+
+	GL_Bind(pic.texnum);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, src_w, src_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	pic.width = src_w;
+	pic.height = src_h;
+	pic.glwidthscale = 1.0f;
+	pic.glheightscale = 1.0f;
+	pic.texcoords[0] = 0; pic.texcoords[1] = 0;
+	pic.texcoords[2] = 1; pic.texcoords[3] = 0;
+	pic.texcoords[4] = 1; pic.texcoords[5] = 1;
+	pic.texcoords[6] = 0; pic.texcoords[7] = 1;
+
+	top_cache = top;
+	bottom_cache = bottom;
+
+	return &pic;
+}
 
 struct Picture *Draw_LoadPicture(const char *name, enum Draw_LoadPicture_Fallback fallback)
 {

@@ -371,7 +371,7 @@ void Sys_Init_(void)
 		Sys_Error("Couldn't get OS info");
 
 	if ((vinfo.dwMajorVersion < 5) || (vinfo.dwPlatformId == VER_PLATFORM_WIN32s))
-		Sys_Error("Fodquake requires at least Windows 2000");
+		Sys_Error("classicQ requires at least Windows 2000");
 }
 
 /********************************* CLIPBOARD *********************************/
@@ -601,10 +601,10 @@ const char *Sys_GetUserDataPath(void)
 	res = SHGetFolderPathA(NULL, CSIDL_PERSONAL|CSIDL_FLAG_CREATE, NULL, 0, path);
 	if (res == S_OK)
 	{
-		ret = malloc(strlen(path) + strlen("\\Fodquake") + 1);
+		ret = malloc(strlen(path) + strlen("\\classicQ") + 1);
 		if (ret)
 		{
-			sprintf(ret, "%s\\Fodquake", path);
+			sprintf(ret, "%s\\classicQ", path);
 		}
 	}
 

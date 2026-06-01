@@ -79,6 +79,7 @@ int ServerScanner_DataUpdated(struct ServerScanner *serverscanner);
 const struct QWServer **ServerScanner_GetServers(struct ServerScanner *serverscanner, unsigned int *numservers);
 void ServerScanner_FreeServers(struct ServerScanner *serverscanner, const struct QWServer **servers);
 void ServerScanner_RescanServer(struct ServerScanner *serverscanner, const struct QWServer *server);
+void ServerScanner_RescanAll(struct ServerScanner *serverscanner);
 enum ServerScannerStatus ServerScanner_GetStatus(struct ServerScanner *serverscanner);
 
 

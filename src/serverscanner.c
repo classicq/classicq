@@ -20,13 +20,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <string.h>
 
+#include "quakedef.h"
 #include "sys_thread.h"
 #include "sys_net.h"
 #include "serverscanner.h"
+#include "utils.h"
 
-#define MAXCONCURRENTSCANS 16
-#define MAXCONCURRENTPINGS 8
-#define PINGINTERVAL 20000
+extern cvar_t sb_debug;
+
+#define MAXCONCURRENTSCANS 64
+#define MAXCONCURRENTPINGS 32
+#define PINGINTERVAL 5000
 #define QWSERVERTIMEOUT 750000
 
 #warning Needs to reattempt scan/ping
@@ -71,7 +75,17 @@ struct ServerScanner
 	unsigned long long lastpingtime;
 	volatile enum ServerScannerStatus status;
 	unsigned int updated;
+
+	unsigned long long debug_t0;
+	unsigned int debug_first_master_done;
+	unsigned int debug_first_status_done;
+	unsigned int debug_idle_done;
 };
+
+static unsigned long long debug_elapsed_ms(struct ServerScanner *s)
+{
+	return (Sys_IntTime() - s->debug_t0) / 1000;
+}
 
 static int ServerScanner_Thread_Init(struct ServerScanner *serverscanner)
 {
@@ -144,6 +158,21 @@ static void ServerScanner_Thread_QueryMasters(struct ServerScanner *serverscanne
 			Sys_Net_Send(serverscanner->netdata, serverscanner->sockets[serverscanner->masterservers[i].addr.type], querystring, 3, &serverscanner->masterservers[i].addr);
 		}
 	}
+}
+
+// Drop TeamFortress, QWFWD proxies, QTV streamers
+static int is_unwanted_server(const struct QWServer *server)
+{
+	if (server->gamedir && strcasecmp(server->gamedir, "fortress") == 0)
+		return 1;
+	if (server->hostname)
+	{
+		if (Util_strcasestr(server->hostname, "qwfwd"))
+			return 1;
+		if (Util_strcasestr(server->hostname, "qtv"))
+			return 1;
+	}
+	return 0;
 }
 
 static void ServerScanner_Thread_ParseQWServerReply(struct ServerScanner *serverscanner, struct qwserverpriv *qwserver, unsigned char *data, unsigned int datalen)
@@ -241,6 +270,17 @@ static void ServerScanner_Thread_ParseQWServerReply(struct ServerScanner *server
 
 	datalen--;
 	data++;
+
+	if (is_unwanted_server(&qwserver->pub))
+	{
+		free((void *)qwserver->pub.map);
+		free((void *)qwserver->pub.hostname);
+		free((void *)qwserver->pub.gamedir);
+		qwserver->pub.map = 0;
+		qwserver->pub.hostname = 0;
+		qwserver->pub.gamedir = 0;
+		return;
+	}
 
 	qwserver->pub.status = QWSS_DONE;
 
@@ -545,6 +585,13 @@ static void ServerScanner_Thread_HandlePacket(struct ServerScanner *serverscanne
 			if ((datalen%6) != 0)
 				return;
 
+			if (!serverscanner->debug_first_master_done && sb_debug.value)
+			{
+				Com_Printf("SB: t=%llums    first master reply (%u records, %u known)\n",
+					debug_elapsed_ms(serverscanner), (unsigned int)(datalen / 6), serverscanner->numqwservers);
+				serverscanner->debug_first_master_done = 1;
+			}
+
 			for(i=0;i<datalen;i+=6)
 			{
 				if (serverscanner->numqwservers > 10000)
@@ -614,6 +661,12 @@ static void ServerScanner_Thread_HandlePacket(struct ServerScanner *serverscanne
 	{
 		if (NET_CompareAdr(&qwserver->pub.addr, addr) && qwserver->pub.status == QWSS_REQUESTSENT)
 		{
+			if (!serverscanner->debug_first_status_done && sb_debug.value)
+			{
+				Com_Printf("SB: t=%llums    first status reply\n", debug_elapsed_ms(serverscanner));
+				serverscanner->debug_first_status_done = 1;
+			}
+
 			Sys_Thread_LockMutex(serverscanner->mutex);
 
 			serverscanner->updated = 1;
@@ -677,6 +730,7 @@ static void ServerScanner_Thread_CheckTimeout(struct ServerScanner *serverscanne
 		if (qwserver->packetsendtime + QWSERVERTIMEOUT <= curtime)
 		{
 			qwserver->pub.pingtime = 999999;
+			qwserver->pub.status = QWSS_FAILED;
 
 			if (prevqwserver)
 				prevqwserver->nextpinginprogress = qwserver->nextpinginprogress;
@@ -723,6 +777,10 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 		}
 
 		serverscanner->starttime = Sys_IntTime();
+		serverscanner->debug_t0 = serverscanner->starttime;
+
+		if (sb_debug.value)
+			Com_Printf("SB: t=0ms       scanner querying %u master(s)\n", serverscanner->numvalidmasterservers);
 
 		ServerScanner_Thread_QueryMasters(serverscanner);
 
@@ -746,7 +804,8 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 
 	if (serverscanner->status == SSS_SCANNING)
 	{
-		if (serverscanner->qwserversscanwaiting == 0 && serverscanner->qwserversscaninprogress == 0 && Sys_IntTime() > serverscanner->starttime + 2000000)
+		if (serverscanner->qwserversscanwaiting == 0 && serverscanner->qwserversscaninprogress == 0
+			&& (serverscanner->numqwservers > 0 || Sys_IntTime() > serverscanner->starttime + 2000000))
 		{
 			serverscanner->status = SSS_PINGING;
 		}
@@ -759,7 +818,25 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 			if (serverscanner->qwserversscanwaiting)
 				serverscanner->status = SSS_SCANNING;
 			else
+			{
 				serverscanner->status = SSS_IDLE;
+				if (!serverscanner->debug_idle_done && sb_debug.value)
+				{
+					struct qwserverpriv *p;
+					unsigned int alive = 0;
+					unsigned int dead = 0;
+					for (p = serverscanner->qwservers; p; p = p->next)
+					{
+						if (p->pub.status == QWSS_DONE)
+							alive++;
+						else if (p->pub.status == QWSS_FAILED)
+							dead++;
+					}
+					Com_Printf("SB: t=%llums   scanner idle (%u known, %u alive, %u dead)\n",
+						debug_elapsed_ms(serverscanner), serverscanner->numqwservers, alive, dead);
+					serverscanner->debug_idle_done = 1;
+				}
+			}
 		}
 	}
 
@@ -1018,7 +1095,7 @@ const struct QWServer **ServerScanner_GetServers(struct ServerScanner *serversca
 			count = 0;
 			for(i=0;i<serverscanner->numqwservers;i++)
 			{
-				if (qwserver->pub.status >= QWSS_DONE)
+				if (qwserver->pub.status == QWSS_DONE && qwserver->pub.hostname && qwserver->pub.map)
 				{
 					servers[count++] = &qwserver->pub;
 				}
@@ -1044,6 +1121,56 @@ void ServerScanner_FreeServers(struct ServerScanner *serverscanner, const struct
 
 void ServerScanner_RescanServer(struct ServerScanner *serverscanner, const struct QWServer *server)
 {
+	struct qwserverpriv *priv;
+
+	if (serverscanner == 0 || server == 0)
+		return;
+
+	Sys_Thread_LockMutex(serverscanner->mutex);
+
+	for (priv = serverscanner->qwservers; priv; priv = priv->next)
+	{
+		if (&priv->pub == server)
+			break;
+	}
+
+	if (priv && priv->pub.status == QWSS_DONE)
+	{
+		priv->pub.status = QWSS_WAITING;
+		priv->nextscanwaiting = serverscanner->qwserversscanwaiting;
+		serverscanner->qwserversscanwaiting = priv;
+		if (serverscanner->status == SSS_IDLE || serverscanner->status == SSS_PINGING)
+			serverscanner->status = SSS_SCANNING;
+		serverscanner->updated = 1;
+	}
+
+	Sys_Thread_UnlockMutex(serverscanner->mutex);
+}
+
+void ServerScanner_RescanAll(struct ServerScanner *serverscanner)
+{
+	struct qwserverpriv *priv;
+
+	if (serverscanner == 0)
+		return;
+
+	Sys_Thread_LockMutex(serverscanner->mutex);
+
+	for (priv = serverscanner->qwservers; priv; priv = priv->next)
+	{
+		if (priv->pub.status == QWSS_DONE)
+		{
+			priv->pub.status = QWSS_WAITING;
+			priv->nextscanwaiting = serverscanner->qwserversscanwaiting;
+			serverscanner->qwserversscanwaiting = priv;
+		}
+	}
+
+	if (serverscanner->status == SSS_IDLE || serverscanner->status == SSS_PINGING)
+		serverscanner->status = SSS_SCANNING;
+	serverscanner->updated = 1;
+
+	Sys_Thread_UnlockMutex(serverscanner->mutex);
 }
 
 enum ServerScannerStatus ServerScanner_GetStatus(struct ServerScanner *serverscanner)

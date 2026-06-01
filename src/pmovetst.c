@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "pmove.h"
 
 static	hull_t		box_hull;
-static	dclipnode_t	box_clipnodes[6];
+static	mclipnode_t	box_clipnodes[6];
 static	mplane_t	box_planes[6];
 
 extern	vec3_t player_mins;
@@ -71,7 +71,7 @@ hull_t	*PM_HullForBox (vec3_t mins, vec3_t maxs) {
 
 int PM_HullPointContents (hull_t *hull, int num, vec3_t p) {
 	float d;
-	dclipnode_t *node;
+	mclipnode_t *node;
 	mplane_t *plane;
 
 	while (num >= 0) {
@@ -90,7 +90,7 @@ int PM_HullPointContents (hull_t *hull, int num, vec3_t p) {
 
 int PM_PointContents (vec3_t p) {
 	float d;
-	dclipnode_t	*node;
+	mclipnode_t	*node;
 	mplane_t *plane;
 	hull_t *hull;
 	int num;
@@ -123,7 +123,7 @@ LINE TESTING IN HULLS
 #define	DIST_EPSILON	(0.03125)
 
 qboolean PM_RecursiveHullCheck (hull_t *hull, int num, float p1f, float p2f, vec3_t p1, vec3_t p2, pmtrace_t *trace) {
-	dclipnode_t	*node;
+	mclipnode_t	*node;
 	mplane_t *plane;
 	float t1, t2, frac, midf;
 	int i, side;

@@ -34,7 +34,7 @@ CL_Version_f
 */
 void CL_Version_f (void)
 {
-	Com_Printf ("Fodquake version %s\n", VersionString());	
+	Com_Printf ("classicQ v%s\n", VersionString());
 	Com_Printf ("Exe: "__TIME__" "__DATE__"\n");
 }
 
@@ -45,6 +45,6 @@ VersionString
 */
 char *VersionString (void)
 {
-	return FODQUAKE_VERSION;
+	return CLASSICQ_VERSION;
 }
 

@@ -58,6 +58,7 @@ void Draw_TextBox(int x, int y, int width, int lines);
 
 
 struct Picture *Draw_LoadPicture(const char *name, enum Draw_LoadPicture_Fallback fallback);
+struct Picture *Draw_BuildTranslatedMenuplyr(int top, int bottom);
 void Draw_FreePicture(struct Picture *);
 unsigned int Draw_GetPictureWidth(struct Picture *);
 unsigned int Draw_GetPictureHeight(struct Picture *);

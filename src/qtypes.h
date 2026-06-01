@@ -3,7 +3,7 @@
 
 typedef unsigned char byte;
 
-typedef enum { false, true } qboolean;
+typedef int qboolean;
 
 typedef float vec_t;
 typedef vec_t vec3_t[3];

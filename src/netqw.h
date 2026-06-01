@@ -7,6 +7,7 @@ void NetQW_GenerateFrames(struct NetQW *netqw);
 void NetQW_SetFPS(struct NetQW *netqw, unsigned int fps);
 unsigned long long NetQW_GetFrameTime(struct NetQW *netqw);
 int NetQW_AppendReliableBuffer(struct NetQW *netqw, const void *buffer, unsigned int bufferlen);
+int NetQW_AppendUnreliableBuffer(struct NetQW *netqw, const void *buffer, unsigned int bufferlen);
 unsigned int NetQW_GetPacketLength(struct NetQW *netqw);
 void *NetQW_GetPacketData(struct NetQW *netqw);
 void NetQW_FreePacket(struct NetQW *netqw);

@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "context_sensitive_tab.h"
 #include "tokenize_string.h"
 
 #include "sound.h"
@@ -731,7 +730,7 @@ static struct L_lua_states *Lua_CreateState(char *script, char *name)
 	lua_pushstring(ls->L, "string");
 	lua_call(ls->L, 1, 0);
 
-	Lua_RegisterFunctions("fodquake", ls->L, Basic_Functions_Methods, Functions_Meta);
+	Lua_RegisterFunctions("classicq", ls->L, Basic_Functions_Methods, Functions_Meta);
 	Lua_RegisterFunctions("draw", ls->L, Draw_Functions_Methods, Functions_Meta);
 	Lua_RegisterFunctions("variables", ls->L, Variables_Methods, Variables_Meta);
 
@@ -739,7 +738,7 @@ static struct L_lua_states *Lua_CreateState(char *script, char *name)
 	s = lua_helpers;
 	while (*s)
 	{
-		if (luaL_dofile(ls->L, va("fodquake/lua/helpers/%s.lua", *s)) != 0)
+		if (luaL_dofile(ls->L, va("classicq/lua/helpers/%s.lua", *s)) != 0)
 		{
 			Com_Printf("error loading %s helper\n", *s);
 			Lua_Remove_State(ls);
@@ -781,17 +780,17 @@ static void Lua_Load_Scripts(void)
 	int i;
 	static const char * const filters[] = {"$.lua", NULL};
 
-	dlist = Util_Dir_Read("fodquake/lua/autoload", 1, 1, filters);
+	dlist = Util_Dir_Read("classicq/lua/autoload", 1, 1, filters);
 
 	if (dlist == NULL)
 	{
-		Com_Printf("no scripts in fodquake/lua/autoload\n");
+		Com_Printf("no scripts in classicq/lua/autoload\n");
 		return;
 	}
 
 	for (i=0; i<dlist->entry_count; i++)
 	{
-		Lua_CreateState(va("fodquake/lua/autoload/%s", dlist->entries[i].name), dlist->entries[i].name);
+		Lua_CreateState(va("classicq/lua/autoload/%s", dlist->entries[i].name), dlist->entries[i].name);
 	}
 
 	Util_Dir_Delete(dlist);
@@ -887,7 +886,7 @@ static void Lua_Load(void)
 		Com_Printf("Usage: %s script.lua.\n", Cmd_Argv(0));
 		return;
 	}
-	Lua_CreateState(va("fodquake/lua/%s", Cmd_Argv(1)), Cmd_Argv(0));
+	Lua_CreateState(va("classicq/lua/%s", Cmd_Argv(1)), Cmd_Argv(0));
 }
 
 #warning This could probably be done a lot better.
@@ -1090,114 +1089,6 @@ void Lua_Key(int key)
 }
 
 /********
- * CSTC *
- ********/
-
-struct cstc_lua_load_info
-{
-	struct directory_list *dl;
-	qboolean *checked;
-	qboolean initialized;
-};
-
-static int cstc_lua_load_check(char *entry, struct tokenized_string *ts)
-{
-	int i;
-
-	for (i=0; i<ts->count; i++)
-	{
-		if (Util_strcasestr(entry, ts->tokens[i]) == NULL)
-			return 0;
-	}
-	return 1;
-}
-
-static int cstc_lua_load_get_data(struct cst_info *self, int remove)
-{
-	struct cstc_lua_load_info *data;
-	const char * const script_endings[] = { "$.lua", NULL};
-
-	if (!self)
-		return 1;
-
-	if (self->data)
-	{
-		data = (struct cstc_lua_load_info *)self->data;
-		Util_Dir_Delete(data->dl);
-		free(data->checked);
-		free(data);
-		self->data = NULL;
-	}
-
-	if (remove)
-		return 0;
-
-	if ((data = calloc(1, sizeof(*data))))
-	{
-		if ((data->dl = Util_Dir_Read("fodquake/lua/", 0, 1, script_endings)))
-		{
-			if (data->dl->entries == 0)
-			{
-				cstc_lua_load_get_data(self, 1);
-				return 1;
-			}
-			self->data = data;
-			return 0;
-		}
-		free(data);
-	}
-	return 1;
-}
-
-static int cstc_lua_load_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	struct cstc_lua_load_info *data;
-	int count, i;
-
-	if (self->data == NULL)
-		return 1;
-
-	data = (struct cstc_lua_load_info *)self->data;
-
-	if (results || data->initialized == false)
-	{
-		if (data->checked)
-			free(data->checked);
-		if (!(data->checked= calloc(data->dl->entry_count, sizeof(qboolean))))
-			return 1;
-
-		for (i=0, count=0; i<data->dl->entry_count; i++)
-		{
-			if (cstc_lua_load_check(data->dl->entries[i].name, self->tokenized_input))
-			{
-				data->checked[i] = true;
-				count++;
-			}
-		}
-		if (results)
-			*results = count;
-
-		data->initialized = true;
-		return 0;
-	}
-
-	if (result == NULL)
-		return 0;
-
-	for (i=0, count=-1; i<data->dl->entry_count; i++)
-	{
-		if (data->checked[i] == true)
-			count++;
-		if (count == get_result)
-		{
-			*result = data->dl->entries[i].name;
-			return 0;
-		}
-	}
-	return 1;
-}
-
-/********
  * Init *
  ********/
 
@@ -1305,7 +1196,6 @@ void Lua_CvarInit(void)
 	Cmd_AddCommand("lua_list_cfunctions", Lua_List_CFunctions);
 	Cmd_AddCommand("lua_restart", Lua_Restart);
 	Cmd_AddCommand("lua_load", Lua_Load);
-	CSTC_Add("lua_load", NULL, &cstc_lua_load_get_results, &cstc_lua_load_get_data, NULL, CSTC_EXECUTE, "arrow up/down to navigate");
 }
 #else
 void Lua_Frame(void)

@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef GLQUAKE
 #include "gl_local.h"
+#include "gl_post_process.h"
 #else
 #include "r_local.h"
 #endif
@@ -43,10 +44,10 @@ when crossing a water boudnary.
 */
 
 cvar_t	cl_rollspeed = {"cl_rollspeed", "200"};
-cvar_t	cl_rollangle = {"cl_rollangle", "2.0"};
-cvar_t	cl_bob = {"cl_bob", "0.02"};
-cvar_t	cl_bobcycle = {"cl_bobcycle", "0.6"};
-cvar_t	cl_bobup = {"cl_bobup", "0.5"};
+cvar_t	cl_rollangle = {"cl_rollangle", "0"};
+cvar_t	cl_bob = {"cl_bob", "0"};
+cvar_t	cl_bobcycle = {"cl_bobcycle", "0"};
+cvar_t	cl_bobup = {"cl_bobup", "0"};
 cvar_t	v_kicktime = {"v_kicktime", "0"};
 cvar_t	v_kickroll = {"v_kickroll", "0.6"};
 cvar_t	v_kickpitch = {"v_kickpitch", "0.6"};
@@ -57,7 +58,7 @@ cvar_t	v_viewheight = {"v_viewheight", "0"};
 
 
 cvar_t	cl_drawgun = {"r_drawviewmodel", "1"};
-cvar_t	r_viewmodelsize = {"r_viewmodelSize", "1"};
+cvar_t	r_viewmodelsize = {"r_viewmodelSize", "0.65"};
 
 static qboolean Change_v_idle (cvar_t *var, char *value);
 cvar_t	v_iyaw_cycle = {"v_iyaw_cycle", "2", 0, Change_v_idle};
@@ -71,21 +72,21 @@ cvar_t	v_idlescale = {"v_idlescale", "0", 0, Change_v_idle};
 static void PostChange_crosshairstuff(cvar_t *);
 cvar_t	crosshair = {"crosshair", "2", CVAR_ARCHIVE, 0, PostChange_crosshairstuff};
 cvar_t	crosshaircolor = {"crosshaircolor", "79", CVAR_ARCHIVE, 0, PostChange_crosshairstuff};
-cvar_t	crosshairsize	= {"crosshairsize", "1", 0, 0, PostChange_crosshairstuff};
+cvar_t	crosshairsize	= {"crosshairsize", "0.4", 0, 0, PostChange_crosshairstuff};
 cvar_t  cl_crossx = {"cl_crossx", "0", CVAR_ARCHIVE, 0, PostChange_crosshairstuff};
 cvar_t  cl_crossy = {"cl_crossy", "0", CVAR_ARCHIVE, 0, PostChange_crosshairstuff};
 
-cvar_t  v_contentblend = {"v_contentblend", "1"};
+cvar_t  v_contentblend = {"v_contentblend", "0.1"};
 cvar_t	v_damagecshift = {"v_damagecshift", "0"};
-cvar_t	v_quadcshift = {"v_quadcshift", "1"};
-cvar_t	v_suitcshift = {"v_suitcshift", "1"};
-cvar_t	v_ringcshift = {"v_ringcshift", "1"};
-cvar_t	v_pentcshift = {"v_pentcshift", "1"};
+cvar_t	v_quadcshift = {"v_quadcshift", "0.3"};
+cvar_t	v_suitcshift = {"v_suitcshift", "0.3"};
+cvar_t	v_ringcshift = {"v_ringcshift", "0.3"};
+cvar_t	v_pentcshift = {"v_pentcshift", "0.3"};
 #ifdef GLQUAKE
 cvar_t	v_dlightcshift = {"v_dlightcshift", "1"};
 #endif
 
-cvar_t	v_bonusflash = {"cl_bonusflash", "1"};
+cvar_t	v_bonusflash = {"cl_bonusflash", "0"};
 
 float	v_dmg_time, v_dmg_roll, v_dmg_pitch;
 
@@ -170,9 +171,15 @@ cshift_t	cshift_lava = { {255,80,0}, 150 };
 cvar_t		gl_cshiftpercent = {"gl_cshiftpercent", "100"};
 cvar_t		gl_hwblend = {"gl_hwblend", "1"};
 float		v_blend[4];		// rgba 0.0 - 1.0
-cvar_t		v_gamma = {"gl_gamma", "1", CVAR_ARCHIVE};
-cvar_t		v_contrast = {"gl_contrast", "1", CVAR_ARCHIVE};
+cvar_t		v_gamma = {"gl_gamma", "0.85", CVAR_ARCHIVE};
+cvar_t		v_contrast = {"gl_contrast", "1.4", CVAR_ARCHIVE};
+cvar_t		vid_hwgammacontrol = {"vid_hwgammacontrol", "0", CVAR_ARCHIVE};
 unsigned short	ramps[3][256];
+
+qboolean V_SoftGammaActive(void)
+{
+	return vid_hwgammacontrol.value == 0 && gl_fbo && GL_PostProcess_IsReady();
+}
 
 #else
 
@@ -490,7 +497,12 @@ void V_UpdatePalette(qboolean force_update)
 	float current_gamma, current_contrast, a, rgb[3];
 	static float prev_blend[4];
 	static float old_hwblend;
+	static unsigned short last_ramps[3][256];
+	static int have_last_ramps;
 	extern float vid_gamma;
+
+	if (V_SoftGammaActive())
+		return;
 
 	new = false;
 
@@ -524,7 +536,11 @@ void V_UpdatePalette(qboolean force_update)
 	}
 
 	if (!new && !force_update)
+	{
+		if (have_last_ramps && VID_HWGammaSupported())
+			VID_SetDeviceGammaRamp((unsigned short *)last_ramps);
 		return;
+	}
 
 	a = v_blend[3];
 
@@ -559,6 +575,8 @@ void V_UpdatePalette(qboolean force_update)
 				ramps[j][i] = c << 8;
 			}
 		}
+		memcpy(last_ramps, ramps, sizeof(last_ramps));
+		have_last_ramps = 1;
 		VID_SetDeviceGammaRamp ((unsigned short *) ramps);
 	}
 }
@@ -1105,6 +1123,7 @@ void V_CvarInit(void)
 	Cvar_SetCurrentGroup(CVAR_GROUP_SCREEN);
 	Cvar_Register(&v_gamma);
 	Cvar_Register(&v_contrast);
+	Cvar_Register(&vid_hwgammacontrol);
 
 	Cvar_ResetCurrentGroup();
 

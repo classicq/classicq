@@ -349,7 +349,7 @@ void Draw_ConsoleBackground(int lines)
 		Draw_DrawPictureModulated(conbackpic, 0, lines - vid.conheight, vid.conwidth, vid.conheight, 1, 1, 1, scr_conalpha.value);
 	}
 
-	sprintf(ver, "Fodquake %s", FODQUAKE_VERSION);
+	sprintf(ver, "classicQ v%s", CLASSICQ_VERSION);
 	Draw_Alt_String(vid.conwidth - strlen(ver) * 8 - 8, lines - 10, ver);
 }
 

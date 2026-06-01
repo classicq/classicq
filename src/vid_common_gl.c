@@ -59,6 +59,7 @@ void (APIENTRY *qglLinkProgram)(GLuint program);
 void (APIENTRY *qglShaderSource)(GLuint shader, GLsizei count, const GLchar **string, const GLint *length);
 void (APIENTRY *qglUniform1f)(GLint location, GLfloat v0);
 void (APIENTRY *qglUniform1i)(GLint location, GLint v0);
+void (APIENTRY *qglUniform4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
 void (APIENTRY *qglUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 void (APIENTRY *qglUseProgram)(GLuint program);
 
@@ -66,6 +67,18 @@ void (APIENTRY *qglBindAttribLocation)(GLuint program, GLuint index, const GLcha
 void (APIENTRY *qglDisableVertexAttribArray)(GLuint index);
 void (APIENTRY *qglEnableVertexAttribArray)(GLuint index);
 void (APIENTRY *qglVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
+
+/* FBO stuff */
+void (APIENTRY *qglGenFramebuffers)(GLsizei n, GLuint *framebuffers);
+void (APIENTRY *qglDeleteFramebuffers)(GLsizei n, const GLuint *framebuffers);
+void (APIENTRY *qglBindFramebuffer)(GLenum target, GLuint framebuffer);
+void (APIENTRY *qglFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+void (APIENTRY *qglFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+GLenum (APIENTRY *qglCheckFramebufferStatus)(GLenum target);
+void (APIENTRY *qglGenRenderbuffers)(GLsizei n, GLuint *renderbuffers);
+void (APIENTRY *qglDeleteRenderbuffers)(GLsizei n, const GLuint *renderbuffers);
+void (APIENTRY *qglBindRenderbuffer)(GLenum target, GLuint renderbuffer);
+void (APIENTRY *qglRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
 
 
 /* GLSL stuff, ARB version */
@@ -118,6 +131,8 @@ qboolean gl_vbo = false;
 
 qboolean gl_vs;
 qboolean gl_fs;
+
+qboolean gl_fbo = false;
 
 float gldepthmin, gldepthmax;
 
@@ -195,6 +210,7 @@ void GL_CheckExtensions (void)
 	gl_vbo = gl_version_number >= 2 || CheckExtension("GL_ARB_vertex_buffer_object");
 	gl_vs = gl_version_number >= 2 || CheckExtension("GL_ARB_vertex_shader");
 	gl_fs = gl_version_number >= 2 || CheckExtension("GL_ARB_fragment_shader");
+	gl_fbo = gl_version_number >= 3 || CheckExtension("GL_ARB_framebuffer_object");
 
 	if (gl_vbo)
 	{
@@ -234,6 +250,7 @@ void GL_CheckExtensions (void)
 			qglShaderSource = VID_GetProcAddress("glShaderSource");
 			qglUniform1f = VID_GetProcAddress("glUniform1f");
 			qglUniform1i = VID_GetProcAddress("glUniform1i");
+			qglUniform4f = VID_GetProcAddress("glUniform4f");
 			qglUniformMatrix4fv = VID_GetProcAddress("glUniformMatrix4fv");
 			qglUseProgram = VID_GetProcAddress("glUseProgram");
 
@@ -250,6 +267,7 @@ void GL_CheckExtensions (void)
 			 || qglShaderSource == 0
 			 || qglUniform1f == 0
 			 || qglUniform1i == 0
+			 || qglUniform4f == 0
 			 || qglUniformMatrix4fv == 0
 			 || qglUseProgram == 0)
 			{
@@ -286,6 +304,7 @@ void GL_CheckExtensions (void)
 			qglShaderSource = VID_GetProcAddress("glShaderSourceARB");
 			qglUniform1f = VID_GetProcAddress("glUniform1fARB");
 			qglUniform1i = VID_GetProcAddress("glUniform1iARB");
+			qglUniform4f = VID_GetProcAddress("glUniform4fARB");
 			qglUniformMatrix4fv = VID_GetProcAddress("glUniformMatrix4fvARB");
 			qglUseProgram = VID_GetProcAddress("glUseProgramObjectARB");
 
@@ -301,6 +320,7 @@ void GL_CheckExtensions (void)
 			 || qglShaderSource == 0
 			 || qglUniform1f == 0
 			 || qglUniform1i == 0
+			 || qglUniform4f == 0
 			 || qglUniformMatrix4fv == 0
 			 || qglUseProgram == 0)
 			{
@@ -330,6 +350,32 @@ void GL_CheckExtensions (void)
 				}
 			}
 		}
+	}
+
+	if (gl_fbo)
+	{
+		qglGenFramebuffers = VID_GetProcAddress("glGenFramebuffers");
+		qglDeleteFramebuffers = VID_GetProcAddress("glDeleteFramebuffers");
+		qglBindFramebuffer = VID_GetProcAddress("glBindFramebuffer");
+		qglFramebufferTexture2D = VID_GetProcAddress("glFramebufferTexture2D");
+		qglFramebufferRenderbuffer = VID_GetProcAddress("glFramebufferRenderbuffer");
+		qglCheckFramebufferStatus = VID_GetProcAddress("glCheckFramebufferStatus");
+		qglGenRenderbuffers = VID_GetProcAddress("glGenRenderbuffers");
+		qglDeleteRenderbuffers = VID_GetProcAddress("glDeleteRenderbuffers");
+		qglBindRenderbuffer = VID_GetProcAddress("glBindRenderbuffer");
+		qglRenderbufferStorage = VID_GetProcAddress("glRenderbufferStorage");
+
+		if (qglGenFramebuffers == 0
+		 || qglDeleteFramebuffers == 0
+		 || qglBindFramebuffer == 0
+		 || qglFramebufferTexture2D == 0
+		 || qglFramebufferRenderbuffer == 0
+		 || qglCheckFramebufferStatus == 0
+		 || qglGenRenderbuffers == 0
+		 || qglDeleteRenderbuffers == 0
+		 || qglBindRenderbuffer == 0
+		 || qglRenderbufferStorage == 0)
+			gl_fbo = false;
 	}
 
 	if (CheckExtension("GL_ARB_texture_compression"))
@@ -422,11 +468,14 @@ void Check_Gamma (unsigned char *pal)
 	int i;
 
 	if ((i = COM_CheckParm("-gamma")) != 0 && i + 1 < com_argc)
+	{
 		vid_gamma = bound (0.3, Q_atof(com_argv[i + 1]), 1);
+		Cvar_SetDefault (&v_gamma, vid_gamma);
+	}
 	else
+	{
 		vid_gamma = 1;
-
-	Cvar_SetDefault (&v_gamma, vid_gamma);
+	}
 
 	if (vid_gamma != 1)
 	{

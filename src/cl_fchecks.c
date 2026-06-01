@@ -36,7 +36,7 @@ extern char *fversion_clientnames[];
 extern char *fversion_osnames[];
 
 void FChecks_VersionResponse(void) {
-	Cbuf_AddText (va("say %s %s:" QW_RENDERER "\n", fversion_clientnames[imitatedclientnum], fversion_osnames[imitatedosnum]));
+	Cbuf_AddText (va("say %s %s:" QW_ARCH "\n", fversion_clientnames[imitatedclientnum], fversion_osnames[imitatedosnum]));
 }
 
 void FChecks_FServerResponse (void) {
@@ -50,7 +50,7 @@ void FChecks_FServerResponse (void) {
 	else if (adr.type == NA_IPV6 && adr.addr.ipv6.port == 0)
 		adr.addr.ipv6.port = BigShort (PORT_SERVER);
 
-	Cbuf_AddText(va("say Fodquake f_server response: %s\n", NET_AdrToString(&adr)));
+	Cbuf_AddText(va("say classicQ f_server response: %s\n", NET_AdrToString(&adr)));
 }
 
 void FChecks_SkinsResponse(float fbskins) {
@@ -115,7 +115,7 @@ qboolean FChecks_CheckFRulesetRequest (char *s) {
 		return false;
 
 	if (Util_F_Match(s, "f_ruleset"))	{
-		Cbuf_AddText(va("say Fodquake Ruleset: %s\n", Ruleset_GetName()));
+		Cbuf_AddText(va("say classicQ Ruleset: %s\n", Ruleset_GetName()));
 		f_ruleset_reply_time = cls.realtime;
 		return true;
 	}

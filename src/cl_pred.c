@@ -57,6 +57,7 @@ void CL_PredictUsercmd (player_state_t *from, player_state_t *to, usercmd_t *u) 
 	pmove.jump_held = from->jump_held;
 	pmove.waterjumptime = from->waterjumptime;
 	pmove.pm_type = from->pm_type;
+	pmove.onground = from->onground;
 
 	pmove.cmd = *u;
 
@@ -150,6 +151,65 @@ void CL_CalcCrouch (void) {
 #define INTERPOLATEDPHYSICS 0
 #endif
 
+#if INTERPOLATEDPHYSICS
+static void CL_LerpMove(void)
+{
+	static int last_seq = 0;
+	static double t_prev = 0;
+	static double t_latest = 0;
+	static vec3_t pos_prev;
+	static vec3_t pos_latest;
+	static qboolean teleported;
+	int seq;
+	double phys_interval;
+	double visible_time;
+	float frac;
+	int i;
+
+	seq = (int)cls.netchan.outgoing_sequence;
+
+	if (seq < last_seq || seq - last_seq > UPDATE_BACKUP / 2) {
+		last_seq = seq;
+		t_prev = 0;
+		t_latest = cls.realtime;
+		VectorCopy(cl.simorg, pos_prev);
+		VectorCopy(cl.simorg, pos_latest);
+		teleported = false;
+		return;
+	}
+
+	if (seq != last_seq) {
+		t_prev = t_latest;
+		VectorCopy(pos_latest, pos_prev);
+		t_latest = cls.realtime;
+		VectorCopy(cl.simorg, pos_latest);
+		last_seq = seq;
+		teleported = (fabs(pos_latest[0] - pos_prev[0]) > 100
+			|| fabs(pos_latest[1] - pos_prev[1]) > 100
+			|| fabs(pos_latest[2] - pos_prev[2]) > 100);
+	}
+
+	if (t_prev <= 0)
+		return;
+
+	if (teleported) {
+		VectorCopy(pos_latest, cl.simorg);
+		return;
+	}
+
+	phys_interval = t_latest - t_prev;
+	if (phys_interval <= 0)
+		return;
+
+	visible_time = cls.realtime - phys_interval;
+	frac = (visible_time - t_prev) / phys_interval;
+	frac = bound(0, frac, 1);
+
+	for (i = 0; i < 3; i++)
+		cl.simorg[i] = pos_prev[i] + (pos_latest[i] - pos_prev[i]) * frac;
+}
+#endif
+
 void CL_PredictMove (void) {
 	int i, oldphysent;
 	frame_t *from = NULL, *to;
@@ -202,8 +262,6 @@ void CL_PredictMove (void) {
 
 	if (INTERPOLATEDPHYSICS)
 	{
-		double curtime;
-
 		if (cl.validsequence >= 0)
 		{
 			for(i=cl.validsequence;i<cls.netchan.outgoing_sequence-1;i++)
@@ -213,24 +271,23 @@ void CL_PredictMove (void) {
 				CL_PredictUsercmd(&from->playerstate[cl.playernum], &to->playerstate[cl.playernum], &to->cmd);
 			}
 		}
-	
-		curtime = Sys_DoubleTime();
 
-		from = &cl.frames[(cls.netchan.outgoing_sequence - 2) & UPDATE_MASK];
 		to = &cl.frames[(cls.netchan.outgoing_sequence - 1) & UPDATE_MASK];
-
-		playertime = from->senttime + (curtime - to->senttime);
+		pmove.numphysent = oldphysent;
+		VectorCopy(to->playerstate[cl.playernum].origin, cl.simorg);
+		VectorCopy(to->playerstate[cl.playernum].velocity, cl.simvel);
+		cl.onground = pmove.onground;
+		CL_LerpMove();
+		goto out;
 	}
-	else
-	{
-		for (i = 1; i < cls.netchan.outgoing_sequence - cl.validsequence; i++) {
-			from = to;
-			to = &cl.frames[(cl.validsequence + i) & UPDATE_MASK];
-			CL_PredictUsercmd(&from->playerstate[cl.playernum], &to->playerstate[cl.playernum], &to->cmd);
-			cl.onground = pmove.onground;
-			if (to->senttime >= playertime)
-				break;
-		}
+
+	for (i = 1; i < cls.netchan.outgoing_sequence - cl.validsequence; i++) {
+		from = to;
+		to = &cl.frames[(cl.validsequence + i) & UPDATE_MASK];
+		CL_PredictUsercmd(&from->playerstate[cl.playernum], &to->playerstate[cl.playernum], &to->cmd);
+		cl.onground = pmove.onground;
+		if (to->senttime >= playertime)
+			break;
 	}
 
 	if (from == 0)
@@ -256,9 +313,6 @@ void CL_PredictMove (void) {
 	VectorInterpolate(from->playerstate[cl.playernum].velocity, lerpfrac, to->playerstate[cl.playernum].velocity, cl.simvel);
 
 out:
-	if (INTERPOLATEDPHYSICS)
-		CL_CategorizePosition ();
-
 	CL_CalcCrouch ();
 	cl.waterlevel = pmove.waterlevel;
 }

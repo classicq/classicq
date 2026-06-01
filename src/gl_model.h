@@ -31,7 +31,10 @@ d*_t structures are on-disk representations
 m*_t structures are in-memory
 */
 
-#define NODENUM_TO_NODE(__model,__nodenum) ({ model_t *_model = (__model); unsigned int _nodenum = (__nodenum); mnode_t *node; if (_nodenum >= _model->numnodes) { node = (mnode_t *)(_model->leafs + (_nodenum - _model->numnodes)); } else { node = _model->nodes + _nodenum; } node; })
+#define NODENUM_TO_NODE(model, nodenum) \
+	((nodenum) >= (model)->numnodes \
+		? (mnode_t *)((model)->leafs + ((nodenum) - (model)->numnodes)) \
+		: (model)->nodes + (nodenum))
 
 // entity effects
 
@@ -91,9 +94,8 @@ typedef struct texture_s {
 #define SURF_UNDERWATER         (1<<6)
 #define SURF_DRAWALPHA          (1<<7)
 
-// !!! if this is changed, it must be changed in asm_draw.h too !!!
 typedef struct {
-	unsigned short	v[2];
+	unsigned int	v[2];
 	unsigned int	cachededgeoffset;
 } medge_t;
 
@@ -164,17 +166,17 @@ typedef struct msurface_s {
 typedef struct mnode_s {
 // common with leaf
 	int			visframe;		// node needs to be traversed if current
-	
+
 	float		minmaxs[6];		// for bounding box culling
 
-	unsigned short parentnum;
+	unsigned int	parentnum;
 
 // node specific
-	unsigned short planenum;
-	unsigned short childrennum[2];
+	unsigned int	planenum;
+	unsigned int	childrennum[2];
 
-	unsigned short		firstsurface;
-	unsigned short		numsurfaces;
+	unsigned int	firstsurface;
+	unsigned int	numsurfaces;
 } mnode_t;
 
 typedef struct mleaf_s {
@@ -183,7 +185,7 @@ typedef struct mleaf_s {
 
 	float		minmaxs[6];		// for bounding box culling
 
-	unsigned short parentnum;
+	unsigned int	parentnum;
 
 // leaf specific
 	short			contents;		// wil be a negative contents number
@@ -191,14 +193,19 @@ typedef struct mleaf_s {
 	byte		*compressed_vis;
 	struct efrag_s	*efrags;
 
-	unsigned short	firstmarksurfacenum;
+	unsigned int	firstmarksurfacenum;
 	int			nummarksurfaces;
 	byte		ambient_sound_level[NUM_AMBIENTS];
 } mleaf_t;
 
-// !!! if this is changed, it must be changed in asm_i386.h too !!!
+// In-memory clipnode; BSP29 short children are sign-extended to int at load.
 typedef struct {
-	dclipnode_t	*clipnodes;
+	int			planenum;
+	int			children[2];
+} mclipnode_t;
+
+typedef struct {
+	mclipnode_t	*clipnodes;
 	mplane_t	*planes;
 	int			firstclipnode;
 	int			lastclipnode;
@@ -381,10 +388,10 @@ typedef struct model_s
 	int			*surfedges;
 
 	int			numclipnodes;
-	dclipnode_t	*clipnodes;
+	mclipnode_t	*clipnodes;
 
 	int			nummarksurfaces;
-	unsigned short	*marksurfaces;
+	unsigned int	*marksurfaces;
 
 	hull_t		hulls[MAX_MAP_HULLS];
 

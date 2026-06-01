@@ -1,4 +1,4 @@
-#ifdef BUILD_STRL
+#if defined(BUILD_STRL) && !defined(__APPLE__)
 
 /*	$OpenBSD: strlcat.c,v 1.13 2005/08/08 08:05:37 espie Exp $	*/
 

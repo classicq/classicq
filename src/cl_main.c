@@ -45,7 +45,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "fchecks.h"
 #include "modules.h"
 #include "config_manager.h"
-#include "mp3_player.h"
 #include "huffman.h"
 #include "config.h"
 #include "sleep.h"
@@ -56,7 +55,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "strl.h"
 #include "ruleset.h"
 #include "tokenize_string.h"
-#include "context_sensitive_tab.h"
 #include "lua.h"
 
 #ifndef GLQUAKE
@@ -95,7 +93,7 @@ cvar_t	cl_shownet = {"cl_shownet", "0"};	// can be 0, 1, or 2
 
 cvar_t	cl_sbar		= {"cl_sbar", "0", CVAR_ARCHIVE};
 cvar_t	cl_hudswap	= {"cl_hudswap", "0", CVAR_ARCHIVE};
-cvar_t	cl_maxfps	= {"cl_maxfps", "0", CVAR_ARCHIVE};
+cvar_t	cl_maxfps	= {"cl_maxfps", "1000", CVAR_ARCHIVE};
 
 cvar_t	cl_predictPlayers = {"cl_predictPlayers", "1"};
 cvar_t	cl_solidPlayers = {"cl_solidPlayers", "1"};
@@ -107,16 +105,16 @@ static qboolean allowremotecmd = true;
 cvar_t	cl_deadbodyfilter = {"cl_deadbodyFilter", "0"};
 cvar_t	cl_gibfilter = {"cl_gibFilter", "0"};
 cvar_t	cl_muzzleflash = {"cl_muzzleflash", "1"};
-cvar_t	cl_rocket2grenade = {"cl_r2g", "0"};
+cvar_t	cl_rocket2grenade = {"cl_r2g", "1"};
 cvar_t	cl_demospeed = {"cl_demospeed", "1"};
 cvar_t	cl_staticsounds = {"cl_staticSounds", "1"};
-cvar_t	cl_trueLightning = {"cl_trueLightning", "0"};
+cvar_t	cl_trueLightning = {"cl_trueLightning", "0.5"};
 cvar_t	cl_parseWhiteText = {"cl_parseWhiteText", "1"};
 cvar_t	cl_filterdrawviewmodel = {"cl_filterdrawviewmodel", "0"};
 cvar_t	cl_oldPL = {"cl_oldPL", "0"};
 cvar_t	cl_demoPingInterval = {"cl_demoPingInterval", "5"};
 cvar_t	cl_chatsound = {"cl_chatsound", "1"};
-cvar_t	cl_confirmquit = {"cl_confirmquit", "1"};
+cvar_t	cl_confirmquit = {"cl_confirmquit", "0"};
 cvar_t	default_fov = {"default_fov", "0"};
 cvar_t	qizmo_dir = {"qizmo_dir", "qizmo"};
 
@@ -133,17 +131,17 @@ static cvar_t net_lag_ezcheat = { "net_lag_ezcheat", "0", 0, net_lag_ezcheat_cal
 cvar_t cl_imitate_client = { "cl_imitate_client", "none", 0, cl_imitate_client_callback };
 cvar_t cl_imitate_os = { "cl_imitate_os", "none", 0, cl_imitate_os_callback };
 
-cvar_t cl_model_bobbing		= {"cl_model_bobbing", "1"};
+cvar_t cl_model_bobbing		= {"cl_model_bobbing", "0"};
 cvar_t cl_nolerp			= {"cl_nolerp", "1"};
 
 cvar_t r_rocketlight			= {"r_rocketLight", "1"};
 cvar_t r_rocketlightcolor		= {"r_rocketLightColor", "0"};
 cvar_t r_explosionlightcolor	= {"r_explosionLightColor", "0"};
 cvar_t r_explosionlight			= {"r_explosionLight", "1"};
-cvar_t r_explosiontype			= {"r_explosionType", "0"};
+cvar_t r_explosiontype			= {"r_explosionType", "8"};
 cvar_t r_flagcolor				= {"r_flagColor", "0"};
-cvar_t r_lightflicker			= {"r_lightflicker", "1"};
-cvar_t r_rockettrail			= {"r_rocketTrail", "1"};
+cvar_t r_lightflicker			= {"r_lightflicker", "0"};
+cvar_t r_rockettrail			= {"r_rocketTrail", "3"};
 cvar_t r_grenadetrail			= {"r_grenadeTrail", "1"};
 cvar_t r_powerupglow			= {"r_powerupGlow", "1"};
 cvar_t r_drawflat_enable		= {"r_drawflat_enable", "0", 0, r_drawflat_enable_callback };
@@ -159,7 +157,7 @@ cvar_t	team = {"team", "", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	topcolor = {"topcolor","0", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	bottomcolor = {"bottomcolor","0", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	skin = {"skin", "", CVAR_ARCHIVE|CVAR_USERINFO};
-cvar_t	rate = {"rate", "30000", CVAR_ARCHIVE|CVAR_USERINFO};
+cvar_t	rate = {"rate", "50000", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	msg = {"msg", "1", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	noaim = {"noaim", "0", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	w_switch = {"w_switch", "", CVAR_ARCHIVE|CVAR_USERINFO};
@@ -257,7 +255,7 @@ static void CL_InitClientVersionInfo(void);
 
 enum
 {
-	CLIENT_FODQUAKE,
+	CLIENT_CLASSICQ,
 	CLIENT_EZQUAKE_1144,
 	CLIENT_EZQUAKE_1517,
 	CLIENT_EZQUAKE_1_8_2,
@@ -275,7 +273,7 @@ static char *validclientnames[] =
 
 char *fversion_clientnames[] =
 {
-	"Fodquake version "FODQUAKE_VERSION,
+	"classicQ v"CLASSICQ_VERSION,
 	"ezQuake version 1144",
 	"ezQuake version 1517",
 	"ezQuake 1.8.2 stable (build 2029)",
@@ -978,7 +976,7 @@ void CL_MakeActive(void)
 	}
 
 	if (!cls.demoplayback)
-		VID_SetCaption (va("Fodquake: %s", cls.servername));
+		VID_SetCaption (va("classicQ: %s", cls.servername));
 
 	Con_ClearNotify();
 	TP_ExecTrigger("f_spawn");
@@ -1286,6 +1284,10 @@ void CL_ClearState(void)
 
 	Com_DPrintf("Clearing memory\n");
 
+	CL_CleanupActiveDownload(false);
+	cls.downloadtype = dl_none;
+	cls.downloadnumber = 0;
+
 	CL_ClearTEnts();
 	CL_ClearScene();
 
@@ -1323,8 +1325,9 @@ void CL_Disconnect(void)
 	cl.teamfortress = false;
 	cls.ftexsupported = 0;
 	cls.fte2supported = 0;
+	cls.mvdprotocolextensions1 = 0;
 
-	VID_SetCaption("Fodquake");
+	VID_SetCaption("classicQ");
 
 	// stop sounds (especially looping!)
 	S_StopAllSounds(true);
@@ -1363,11 +1366,9 @@ void CL_Disconnect(void)
 
 	Cam_Reset();
 
-	if (cls.download)
-	{
-		fclose(cls.download);
-		cls.download = NULL;
-	}
+	CL_CleanupActiveDownload(false);
+	cls.downloadtype = dl_none;
+	cls.downloadnumber = 0;
 
 	CL_StopUpload();
 	DeleteServerAliases();
@@ -1565,8 +1566,20 @@ void CL_ConnectionlessPacket(void)
 		break;
 
 	case A2C_PRINT:		// print command from somewhere
-		Com_Printf("%s: print\n", NET_AdrToString(&cl_net_from));
-		Com_Printf("%s", MSG_ReadString());
+		{
+			int remaining = cl_net_message.cursize - msg_readcount;
+			const char *s = (const char *)(cl_net_message.data + msg_readcount);
+
+			if (remaining >= 6 && memcmp(s, "\\chunk", 6) == 0)
+			{
+				msg_readcount += 6;
+				CL_ParseChunkedDownloadOOB();
+				break;
+			}
+
+			Com_Printf("%s: print\n", NET_AdrToString(&cl_net_from));
+			Com_Printf("%s", MSG_ReadString());
+		}
 		break;
 
 	case svc_disconnect:
@@ -1774,8 +1787,6 @@ void ToggleConsole_f(void)
 		VID_SetMouseGrab(0);
 	}
 
-	CSTC_Console_Close();
-
 	if (con_clearnotify.value)
 		Con_ClearNotify();
 }
@@ -1974,6 +1985,7 @@ static void CL_InitClientVersionInfo()
 	Info_RemoveKey(cls.userinfo, "*FuhQuake");
 	Info_RemoveKey(cls.userinfo, "*client");
 	Info_RemoveKey(cls.userinfo, "*Fodquake");
+	Info_RemoveKey(cls.userinfo, "*classicQ");
 
 	if (imitatedclientnum == CLIENT_EZQUAKE_1144)
 	{
@@ -1992,7 +2004,7 @@ static void CL_InitClientVersionInfo()
 	 	Info_SetValueForStarKey (cls.userinfo, "*FuhQuake", "0.31", MAX_INFO_STRING);
 	}
 	else
-		Info_SetValueForStarKey (cls.userinfo, "*Fodquake", FODQUAKE_VERSION, MAX_INFO_STRING);
+		Info_SetValueForStarKey (cls.userinfo, "*classicQ", CLASSICQ_VERSION, MAX_INFO_STRING);
 }
 
 void CL_Init (void)
@@ -2022,7 +2034,7 @@ void CL_Init (void)
 	FMod_CheckModel("gfx/colormap.lmp", host_colormap, com_filesize);
 
 	Sys_IO_Create_Directory(va("%s/qw", com_basedir));
-	Sys_IO_Create_Directory(va("%s/fodquake", com_basedir));
+	Sys_IO_Create_Directory(va("%s/classicq", com_basedir));
 
 	Key_Init();
 	V_Init();
@@ -2051,7 +2063,6 @@ void CL_Init (void)
 	CL_Demo_Init();
 	Ignore_Init();
 	Stats_Init();
-	MP3_Init();
 
 	Sleep_Init();
 
@@ -2214,6 +2225,7 @@ void CL_Frame (double time)
 	if (cls.netqw)
 	{
 		CL_DoNetQWStuff();
+		CL_SendChunkedDownloadRequests();
 
 		if (cl.spectator)
 		{
@@ -2275,7 +2287,6 @@ void CL_Frame (double time)
 		S_Update(vec3_origin, vec3_origin, vec3_origin, vec3_origin);
 
 	CDAudio_Update();
-	MP3_Frame();
 	MT_Frame();
 	Lua_Frame();
 
@@ -2300,7 +2311,6 @@ void CL_Shutdown (void)
 	Skin_Shutdown();
 	CDAudio_Shutdown();
 	S_Shutdown();
-	MP3_Shutdown();
 	TP_Shutdown();
 	Log_Shutdown();
 	if (cl_vidinitialised)

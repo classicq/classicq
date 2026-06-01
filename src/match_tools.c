@@ -748,7 +748,7 @@ char *MT_TempDirectory(void) {
 	static char dir[MAX_OSPATH * 2] = {0};
 
 	if (!dir[0])
-		snprintf(dir, sizeof(dir), "%s/fodquake/temp", com_basedir);
+		snprintf(dir, sizeof(dir), "%s/classicq/temp", com_basedir);
 
 	return dir;
 }
@@ -1136,7 +1136,7 @@ void MT_CvarInit(void)
 
 void MT_Init(void)
 {
-	Sys_IO_Create_Directory(va("%s/fodquake/temp", com_basedir));
+	Sys_IO_Create_Directory(va("%s/classicq/temp", com_basedir));
 
 	MT_ClearClientState();
 

@@ -175,19 +175,44 @@ int PM_SlideMove (void) {
 }
 
 //Each intersection will try to step over the obstruction instead of sliding along it.
-void PM_StepSlideMove (void) {
+int PM_StepSlideMove (qboolean in_air) {
 	vec3_t dest;
 	pmtrace_t trace;
 	vec3_t original, originalvel, down, up, downvel;
-	float downdist, updist;
+	float downdist, updist, stepsize;
+	int blocked;
 
 	// try sliding forward both on ground and up 16 pixels
 	// take the move that goes farthest
 	VectorCopy (pmove.origin, original);
 	VectorCopy (pmove.velocity, originalvel);
 
-	if (!PM_SlideMove())
-		return;		// moved the entire distance
+	blocked = PM_SlideMove();
+
+	if (!blocked)
+		return blocked;		// moved the entire distance
+
+	if (in_air) {
+		float *org;
+
+		// don't let us step up unless it's indeed a step we bumped in
+		// (that is, there's solid ground below)
+		if (!(blocked & BLOCKED_STEP))
+			return blocked;
+
+		org = (originalvel[2] < 0) ? pmove.origin : original;
+		VectorCopy (org, dest);
+		dest[2] -= STEPSIZE;
+		trace = PM_PlayerTrace (org, dest);
+		if (trace.fraction == 1 || trace.plane.normal[2] < MIN_STEP_NORMAL)
+			return blocked;
+
+		// adjust stepsize, otherwise it would be possible to walk up
+		// a step higher than STEPSIZE
+		stepsize = STEPSIZE - (org[2] - trace.endpos[2]);
+	} else {
+		stepsize = STEPSIZE;
+	}
 
 	VectorCopy (pmove.origin, down);
 	VectorCopy (pmove.velocity, downvel);
@@ -197,16 +222,19 @@ void PM_StepSlideMove (void) {
 
 	// move up a stair height
 	VectorCopy (pmove.origin, dest);
-	dest[2] += STEPSIZE;
+	dest[2] += stepsize;
 	trace = PM_PlayerTrace (pmove.origin, dest);
 	if (!trace.startsolid && !trace.allsolid)
 		VectorCopy (trace.endpos, pmove.origin);
+
+	if (in_air && originalvel[2] < 0)
+		pmove.velocity[2] = 0;
 
 	PM_SlideMove ();
 
 	// press down the stepheight
 	VectorCopy (pmove.origin, dest);
-	dest[2] -= STEPSIZE;
+	dest[2] -= stepsize;
 	trace = PM_PlayerTrace (pmove.origin, dest);
 	if (trace.fraction != 1 && trace.plane.normal[2] < MIN_STEP_NORMAL)
 		goto usedown;
@@ -226,10 +254,21 @@ void PM_StepSlideMove (void) {
 usedown:
 		VectorCopy (down, pmove.origin);
 		VectorCopy (downvel, pmove.velocity);
-	} else { // copy z value from slide move
-		pmove.velocity[2] = downvel[2];
+		return blocked;
 	}
-	// if at a dead stop, retry the move with nudges to get around lips
+
+	// copy z value from slide move
+	pmove.velocity[2] = downvel[2];
+
+	if (!pmove.onground && pmove.waterlevel < 2 && (blocked & BLOCKED_STEP)) {
+		float scale;
+		// airstep: 16-unit step kills 16% horizontal velocity
+		scale = 1 - 0.01 * (pmove.origin[2] - original[2]);
+		pmove.velocity[0] *= scale;
+		pmove.velocity[1] *= scale;
+	}
+
+	return blocked;
 }
 
 //Handles both ground friction and water friction
@@ -369,7 +408,7 @@ void PM_WaterMove (void) {
 	// water acceleration
 	PM_Accelerate (wishdir, wishspeed, movevars.wateraccelerate);
 
-	PM_StepSlideMove ();
+	PM_StepSlideMove (false);
 }
 
 void PM_FlyMove (void) {
@@ -391,8 +430,8 @@ void PM_FlyMove (void) {
 	}
 	
 	PM_Accelerate (wishdir, wishspeed, movevars.accelerate);
-	
-	PM_StepSlideMove ();
+
+	PM_StepSlideMove (false);
 }
 
 void PM_AirMove (void) {
@@ -435,15 +474,18 @@ void PM_AirMove (void) {
 			return;
 		}
 
-		PM_StepSlideMove ();
-	} else {	
+		PM_StepSlideMove (false);
+	} else {
 		// not on ground, so little effect on velocity
 		PM_AirAccelerate (wishdir, wishspeed, movevars.accelerate);
 
 		// add gravity
 		pmove.velocity[2] -= movevars.entgravity * movevars.gravity * frametime;
 
-		PM_SlideMove ();
+		if (movevars.airstep)
+			PM_StepSlideMove (true);
+		else
+			PM_SlideMove ();
 	}
 }
 

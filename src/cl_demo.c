@@ -30,7 +30,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "utils.h"
 #include "movie.h"
 
-#include "context_sensitive_tab.h"
 #include "tokenize_string.h"
 
 float olddemotime, nextdemotime;
@@ -1314,7 +1313,12 @@ void CL_Play_f (void)
 			COM_DefaultExtension (name, *s);
 
 			if (!strncmp(name, "../", 3) || !strncmp(name, "..\\", 3))
+			{
+				extern const char *ro_data_path;
 				playbackfile = fopen (va("%s/%s", com_basedir, name + 3), "rb");
+				if (!playbackfile && ro_data_path && strcmp(ro_data_path, com_basedir))
+					playbackfile = fopen (va("%s/%s", ro_data_path, name + 3), "rb");
+			}
 			else
 				FS_FOpenFile (name, &playbackfile);
 		}
@@ -1466,109 +1470,6 @@ void CL_Demo_Jump_f(void)
 	cls.demotime = newdemotime;
 }
 
-static int playdemo_checkdemo (char  *name, struct tokenized_string *check)
-{
-	int i;
-
-	if (check->count == 0)
-		return 1;
-
-	for (i=0; i<check->count; i++)
-		if (Util_strcasestr(name, check->tokens[i]) == NULL)
-			return 0;
-
-	return 1;
-}
-
-struct cstc_demoinfo
-{
-	struct directory_list *dl;
-	qboolean *checked;
-	qboolean initialized;
-};
-
-static int cstc_playdemo_data(struct cst_info *self, int remove)
-{
-	struct cstc_demoinfo *data;
-	const char * const demo_endings[] = { ".qwd", ".mvd", NULL};
-
-	if (!self)
-		return 1;
-
-	if (self->data)
-	{
-		data = (struct cstc_demoinfo *)self->data;
-		Util_Dir_Delete(data->dl);
-		free(data->checked);
-		free(self->data);
-		self->data = NULL;
-	}
-
-	if (remove)
-		return 0;
-
-	if ((data = calloc(1, sizeof(*data))))
-	{
-		if ((data->dl = Util_Dir_Read(va("%s", com_basedir), 1, 1, demo_endings)))
-		{
-			self->data = (void *)data;
-			return 1;
-		}
-		free(data);
-	}
-
-	return 0;
-}
-
-static int cstc_playdemo_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	struct cstc_demoinfo *data;
-	int count, i;
-
-	if (self->data == NULL)
-		return 1;
-
-	data = (struct cstc_demoinfo *)self->data;
-
-	if (results || data->initialized == false)
-	{
-		if (data->checked)
-			free(data->checked);
-		data->checked = calloc(data->dl->entry_count, sizeof(qboolean));
-		if (data->checked == NULL)
-			return 1;
-
-		for (i=0, count=0; i<data->dl->entry_count; i++)
-		{
-			if (playdemo_checkdemo(data->dl->entries[i].name, self->tokenized_input))
-			{
-				data->checked[i] = true;
-				count++;
-			}
-		}
-		if (results)
-			*results = count;
-
-		data->initialized = true;
-		return 0;
-	}
-
-	if (result == NULL)
-		return 0;
-
-	for (i=0, count=-1; i<data->dl->entry_count; i++)
-	{
-		if (data->checked[i] == true)
-			count++;
-		if (count == get_result)
-		{
-			*result = va("../%s", data->dl->entries[i].name);
-			return 0;
-		}
-	}
-	return 1;
-}
-
 void CL_CvarDemoInit(void)
 {
 	Cmd_AddCommand ("record", CL_Record_f);
@@ -1583,9 +1484,6 @@ void CL_CvarDemoInit(void)
 	Cvar_SetCurrentGroup(CVAR_GROUP_DEMO);
 	Cvar_Register(&demo_dir);
 	Cvar_ResetCurrentGroup();
-
-	CSTC_Add("playdemo timedemo", NULL, &cstc_playdemo_get_results, &cstc_playdemo_data, NULL, CSTC_MULTI_COMMAND | CSTC_EXECUTE, "arrow up/down to navigate");
-
 }
 
 void CL_Demo_Init(void)

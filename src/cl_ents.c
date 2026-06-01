@@ -392,13 +392,27 @@ void CL_ParseDelta (entity_state_t *from, entity_state_t *to, int bits)
 		if (morebits & FTE_U2_YETMORE)
 			morebits |= MSG_ReadByte()<<8;
 
-		if (morebits & (FTE_U2_UNUSED1|FTE_U2_ENTITYDBL|FTE_U2_ENTITYDBL2|FTE_U2_DRAWFLAGS|FTE_U2_ABSLIGHT|FTE_U2_DPFLAGS|FTE_U2_TAGINFO|FTE_U2_LIGHT|FTE_U2_EFFECT16|FTE_U2_FARMORE))
+		if (morebits & (FTE_U2_UNUSED1|FTE_U2_DRAWFLAGS|FTE_U2_ABSLIGHT|FTE_U2_DPFLAGS|FTE_U2_TAGINFO|FTE_U2_LIGHT|FTE_U2_EFFECT16|FTE_U2_FARMORE))
 		{
 			Host_Error("Unsupported FTE delta morebits 0x%02x\n", morebits);
 		}
 	}
 	else
 		morebits = 0;
+
+	if (morebits & FTE_U2_ENTITYDBL)
+	{
+		if (!(cls.ftexsupported & FTEX_ENTITYDBL))
+			Host_Error("Got unexpected FTE_U2_ENTITYDBL");
+		to->number += 512;
+	}
+
+	if (morebits & FTE_U2_ENTITYDBL2)
+	{
+		if (!(cls.ftexsupported & FTEX_ENTITYDBL2))
+			Host_Error("Got unexpected FTE_U2_ENTITYDBL2");
+		to->number += 1024;
+	}
 
 	to->flags = bits;
 
@@ -1190,7 +1204,10 @@ void CL_ParsePlayerinfo (void)
 	else
 	{
 
-		flags = state->flags = MSG_ReadShort ();
+		flags = (unsigned short) MSG_ReadShort ();
+		if ((cls.ftexsupported & FTEX_TRANS) && (flags & PF_EXTRA_PFS))
+			flags |= MSG_ReadByte() << 16;
+		state->flags = flags;
 
 		state->messagenum = cl.parsecount;
 		state->origin[0] = MSG_ReadCoord ();
@@ -1240,6 +1257,9 @@ void CL_ParsePlayerinfo (void)
 			state->weaponframe = MSG_ReadByte ();
 		else
 			state->weaponframe = 0;
+
+		if ((cls.ftexsupported & FTEX_TRANS) && (flags & PF_TRANS_Z))
+			MSG_ReadByte();
 
 		if (cl.z_ext & Z_EXT_PM_TYPE)
 		{

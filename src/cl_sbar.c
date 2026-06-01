@@ -75,7 +75,7 @@ static int Sbar_TeamOverlay(void);
 
 static int	sbar_xofs;
 
-cvar_t	scr_centerSbar = {"scr_centerSbar", "0"};
+cvar_t	scr_centerSbar = {"scr_centerSbar", "1"};
 
 cvar_t	scr_compactHud = {"scr_compactHud", "0"};
 cvar_t	scr_compactHudAlign = {"scr_compactHudAlign", "0"};
@@ -84,14 +84,14 @@ cvar_t	scr_drawHFrags = {"scr_drawHFrags", "1"};
 cvar_t	scr_drawVFrags = {"scr_drawVFrags", "1"};
 
 cvar_t	scr_scoreboard_teamsort = {"scr_scoreboard_teamsort", "1"};
-cvar_t	scr_scoreboard_forcecolors = {"scr_scoreboard_forcecolors", "1"};
+cvar_t	scr_scoreboard_forcecolors = {"scr_scoreboard_forcecolors", "0"};
 cvar_t	scr_scoreboard_showfrags = {"scr_scoreboard_showfrags", "1"};
 cvar_t	scr_scoreboard_drawtitle = {"scr_scoreboard_drawtitle", "1"};
-cvar_t	scr_scoreboard_borderless = {"scr_scoreboard_borderless", "0"};
-cvar_t scr_scoreboard_titleseperator = { "scr_scoreboard_titleseperator", "0" };
+cvar_t	scr_scoreboard_borderless = {"scr_scoreboard_borderless", "1"};
+cvar_t scr_scoreboard_titleseperator = { "scr_scoreboard_titleseperator", "1" };
 
-cvar_t	scr_scoreboard_fillalpha = {"scr_scoreboard_fillalpha", "0.7"};
-cvar_t	scr_scoreboard_fillcolored = {"scr_scoreboard_fillcolored", "2"};
+cvar_t	scr_scoreboard_fillalpha = {"scr_scoreboard_fillalpha", "0"};
+cvar_t	scr_scoreboard_fillcolored = {"scr_scoreboard_fillcolored", "0"};
 
 /********************************** CONTROL **********************************/
 
@@ -758,9 +758,9 @@ static void Sbar_DrawInventory (void)
 				if (i || vid.conheight > 200)
 				{
 					if (i == 6)
-						Sbar_DrawSubPicNormalised((hudswap ? 0 : vid.conwidth - 24), -68 - (7 - i) * 16, 24, 16, sb_weapons[flashon][i], 0, 0, 0.5, 1);
+						Sbar_DrawSubPicNormalised((hudswap ? 0 : vid.conwidth - 32), -92 - (7 - i) * 16, 24, 16, sb_weapons[flashon][i], 0, 0, 0.5, 1);
 					else
-						Sbar_DrawPic((hudswap ? 0 : vid.conwidth - 24) - sbar_xofs, -68 - (7 - i) * 16, sb_weapons[flashon][i], 24, 16);
+						Sbar_DrawPic((hudswap ? 0 : vid.conwidth - 32) - sbar_xofs, -92 - (7 - i) * 16, sb_weapons[flashon][i], 24, 16);
 				}
 			}
 			else

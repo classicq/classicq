@@ -1,0 +1,60 @@
+Date: 13th of December, 1998
+
+-----------------------------------------------------------------------
+Title:        Cryptosporidium
+Filename:     efdm8.bsp
+Game:         Quake 1
+Author:       Mr Fribbles
+Email:        fribbles@planetquake.com
+URL:          http://www.planetquake.com/frib/
+Descrition:   1on1, ffa 3-4. Designed with dm3 rules in mind. 
+	      Visually: this map is an "evolution" rather than a "clone"
+              or a "tribute"... I've taken the concept of efdm7 and 
+              expanded upon it.
+	      Architecture: small, tight, and vertical, without 
+              being overly restrictive. Rocket jumper's paradise.
+	      Stocked to the gills. Just the way I like it.
+	      p.s boil vigorously before drinking.
+
+Additional
+credits:      -David Jewsbury for Stoneless
+	      -Webby, for providing valuable feedback and advice
+	      -Jeff Yost and the crew over at Ramshackle
+	       http://www.planetquake.com/ramshackle/
+              -Headshot, for his cool textues
+              -The folks at PlanetQuake, for their support and help
+                
+-----------------------------------------------------------------------
+* Play information *
+
+Requirements:        quake 1.01 or higher
+Single player:       If you're really keen
+Deathmatch:          2-4
+New sounds:          no
+New Graphics:        custom textures
+
+-----------------------------------------------------------------------
+* Construction *
+
+Base:               new map from scratch
+Editor:             stoneless (v 1.01)
+Textures wads used: some from q2, some I've modified, 
+                    head_mt7, head_mt8 by Headshot
+Bugs:               none that I'm aware of
+Build time:         3-4 days build time + 2-3 weeks tweaking and testing
+Compile machine:    p120 32mb
+Compile time:       qbsp: 4.02
+                    light -extra: 5.43
+                    vis - level 4: 11.58
+
+-----------------------------------------------------------------------
+* Copyight / Permissions *
+
+Authors may NOT use this level as a base to build additional
+levels.
+You are not allowed to commercially exploit this level, i.e. put it on a CD 
+or any other electronic format that is sold for money without my explicit
+permission.
+You MAY distribute this BSP through any electronic network, provided you 
+include this file and leave the archive intact.
+-----------------------------------------------------------------------

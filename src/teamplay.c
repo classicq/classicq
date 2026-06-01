@@ -47,6 +47,7 @@ cvar_t	tp_msgtriggers = {"tp_msgtriggers", "1"};
 cvar_t	tp_forceTriggers = {"tp_forceTriggers", "0"};
 cvar_t	cl_nofake = {"cl_nofake", "0"};
 cvar_t	tp_loadlocs = {"tp_loadlocs", "1"};
+cvar_t	name_short = {"name_short", "unn", CVAR_ARCHIVE};
 
 
 cvar_t	cl_teamskin = {"teamskin", "", 0, 0, OnChangeSkinForcing};
@@ -2077,8 +2078,8 @@ static qboolean TP_IsFlagMessage(char *message)
 			strstr(message, " has taken your Key") ||
 			strstr(message, " has your flag") ||
 			strstr(message, " took your flag!") ||
-			strstr(message, " ÔÏÏË ÙÏÕÒ flag!") ||
-			strstr(message, " çïô òåä§ó æìáç®") || strstr(message, " çïô âìõå§ó æìáç®") ||
+			strstr(message, " ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ flag!") ||
+			strstr(message, " ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½") || strstr(message, " ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½") ||
 			strstr(message, " took the blue flag") || strstr(message, " took the red flag") ||
 			strstr(message, " Has the Red Flag") || strstr(message, " Has the Blue Flag")
 		)
@@ -3403,6 +3404,7 @@ void TP_CvarInit(void)
 	Cvar_Register (&tp_loadlocs);
 	Cvar_Register (&tp_soundtrigger);
 	Cvar_Register (&tp_weapon_order);
+	Cvar_Register (&name_short);
 
 	Cvar_SetCurrentGroup(CVAR_GROUP_ITEM_NAMES);
 	Cvar_Register (&tp_name_separator);

@@ -1,0 +1,83 @@
+# Auto-detect text files; ensure LF normalization on commit by default
+* text=auto eol=lf
+
+# === Code ===
+*.c       text eol=lf
+*.h       text eol=lf
+*.m       text eol=lf
+*.zig     text eol=lf
+*.s       text eol=lf
+
+# === Build / config / docs ===
+*.md      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.json    text eol=lf
+*.toml    text eol=lf
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.mk      text eol=lf
+build.zig text eol=lf
+
+# === Windows-native scripts and resource files (keep CRLF) ===
+*.ps1     text eol=crlf
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.rc      text eol=crlf
+
+# === Plist (Apple XML) - LF ===
+*.plist   text eol=lf
+
+# === Binary game data (Quake formats) ===
+*.pak     binary
+*.wad     binary
+*.bsp     binary
+*.spr     binary
+*.mdl     binary
+*.dem     binary
+*.qwd     binary
+*.mvd     binary
+*.lit     binary
+*.lmp     binary
+
+# === Quake cfg files — bytes 0x80-0x9F are charset glyphs (key-cap brackets
+# etc), not UTF-8. Mark as -text so Git keeps the bytes verbatim instead of
+# UTF-8-normalizing them into U+FFFD on edit/normalize.
+*.cfg     -text
+
+# === Binary media ===
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.tga     binary
+*.bmp     binary
+*.ico     binary
+*.icns    binary
+*.wav     binary
+*.mp3     binary
+*.ogg     binary
+*.ttf     binary
+*.otf     binary
+
+# === Binary archives ===
+*.zip     binary
+*.tar     binary
+*.tar.gz  binary
+*.gz      binary
+*.7z      binary
+
+# === Compiled output (in case someone commits accidentally) ===
+*.exe     binary
+*.dll     binary
+*.so      binary
+*.dylib   binary
+*.a       binary
+*.o       binary
+*.obj     binary
+
+# === Linguist hints (GitHub language statistics) ===
+# Don't count vendored/asset files toward language %
+assets/**           linguist-vendored
+*.css               linguist-vendored
+*.json              linguist-vendored

@@ -11,18 +11,18 @@
 #endif
 
 #define	QW_VERSION              2.40
-#define FODQUAKE_VERSION        "0.4 dev" COMPILERVERSIONSTRINGAPPEND
+#define CLASSICQ_VERSION        "3.0.0" COMPILERVERSIONSTRINGAPPEND
 
-#ifdef _WIN32
-#define QW_PLATFORM     "Win32"
+#if defined(_WIN32) || defined(_WIN64)
+#define QW_PLATFORM     "Windows"
 #elif defined(linux)
 #define QW_PLATFORM     "Linux"
+#elif defined(__APPLE__)
+#define QW_PLATFORM     "macOS"
 #elif defined(__MORPHOS__)
 #define QW_PLATFORM     "MorphOS"
 #elif defined(__CYGWIN__)
 #define QW_PLATFORM     "Cygwin"
-#elif defined(__MACOSX__)
-#define QW_PLATFORM     "MacOS X"
 #elif defined(__FreeBSD__)
 #define QW_PLATFORM     "FreeBSD"
 #elif defined(__NetBSD__)
@@ -34,6 +34,18 @@
 #define QW_PLATFORM     "Wii"
 #elif defined(AROS)
 #define QW_PLATFORM     "AROS"
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+#define QW_ARCH "amd64"
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define QW_ARCH "arm64"
+#elif defined(__i386__) || defined(_M_IX86)
+#define QW_ARCH "i386"
+#elif defined(__arm__)
+#define QW_ARCH "arm"
+#else
+#define QW_ARCH "unknown"
 #endif
 
 #ifdef GLQUAKE

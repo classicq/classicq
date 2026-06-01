@@ -33,7 +33,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #include "utils.h"
-#include "mp3_player.h"
 
 #include "strl.h"
 
@@ -86,8 +85,7 @@ enum menustates
 	m_gameoptions,
 	m_fps,
 	m_demos,
-	m_mp3_control,
-	m_mp3_playlist
+	m_teamcomms
 };
 
 static enum menustates m_state;
@@ -102,9 +100,9 @@ static void M_Menu_Main_f(void);
 		static void M_Menu_GameOptions_f(void);
 	static void M_Menu_Options_f(void);
 		static void M_Menu_Keys_f(void);
+		static void M_Menu_TeamComms_f(void);
 		static void M_Menu_Fps_f(void);
 		static void M_Menu_Video_f(void);
-	static void M_Menu_MP3_Control_f(void);
 
 static void M_Main_Draw(void);
 	static void M_SinglePlayer_Draw(void);
@@ -116,6 +114,7 @@ static void M_Main_Draw(void);
 		static void M_GameOptions_Draw(void);
 	static void M_Options_Draw(void);
 		static void M_Keys_Draw(void);
+		static void M_TeamComms_Draw(void);
 		static void M_Fps_Draw(void);
 		static void M_Video_Draw(void);
 	static void M_Help_Draw(void);
@@ -131,6 +130,7 @@ static void M_Main_Key(int key);
 		static void M_GameOptions_Key(int key);
 
 		static void M_Keys_Key(int key);
+		static void M_TeamComms_Key(int key);
 		static void M_Video_Key(int key);
 	static void M_Help_Key(int key);
 	static void M_Quit_Key(int key);
@@ -148,7 +148,7 @@ static int m_topmenu;             /* set if a submenu was entered via a menu_* c
 //=============================================================================
 /* Support Routines */
 
-cvar_t	scr_scaleMenu = {"scr_scaleMenu","1"};
+cvar_t	scr_scaleMenu = {"scr_scaleMenu","0"};
 static int		menuwidth = 320;
 static int		menuheight = 240;
 
@@ -173,6 +173,11 @@ static void M_PrintWhite(int cx, int cy, const char *str)
 static void M_DrawPic(struct Picture *pic, int x, int y, int width, int height)
 {
 	Draw_DrawPicture(pic, x + ((menuwidth - 320)>>1), y + m_yofs, width, height);
+}
+
+static void M_DrawFill(int x, int y, int width, int height, int color)
+{
+	Draw_Fill(x + ((menuwidth - 320)>>1), y + m_yofs, width, height, color);
 }
 
 #if 0
@@ -338,6 +343,15 @@ struct MenuItemCvarMultiSelect
 	int numvalues;
 };
 
+struct MenuItemCvarValuePreset
+{
+	struct MenuItem menuitem;
+
+	cvar_t *cvar;
+	const int *values;
+	unsigned int numvalues;
+};
+
 struct Menu
 {
 	int error;
@@ -437,7 +451,7 @@ static void Menu_Layout(struct Menu *menu)
 		return;
 	}
 
-	labelstart = 48;
+	labelstart = 56;
 	y = 32;
 	i = 0;
 
@@ -933,6 +947,111 @@ static struct MenuItem *MenuItemCvarMultiSelect_Create(const char *label, cvar_t
 	return 0;
 }
 
+static void MenuItemCvarValuePreset_Draw(struct MenuItem *menuitem, unsigned int extra_x, unsigned int extra_width)
+{
+	struct MenuItemCvarValuePreset *m;
+	int v, min, max, i;
+	int slider_chars;
+	float position;
+	char buf[16];
+
+	m = (struct MenuItemCvarValuePreset *)menuitem;
+	v = (int)m->cvar->value;
+	min = m->values[0];
+	max = m->values[m->numvalues - 1];
+
+	slider_chars = (extra_width / 8) - 5;
+	if (slider_chars < 5)
+		slider_chars = 5;
+
+	position = (bound(min, v, max) - min) / (float)(max - min);
+
+	M_DrawCharacter(extra_x, menuitem->y, 128);
+	for (i = 0; i < slider_chars - 2; i++)
+		M_DrawCharacter(extra_x + 8 + i*8, menuitem->y, 129);
+	M_DrawCharacter(extra_x + 8 + i*8, menuitem->y, 130);
+	M_DrawCharacter(extra_x + 8 + (position * ((slider_chars - 3) * 8)), menuitem->y, 131);
+
+	snprintf(buf, sizeof(buf), "%d", v);
+	M_Print(extra_x + (slider_chars + 1) * 8, menuitem->y, buf);
+}
+
+static void MenuItemCvarValuePreset_HandleKey(struct MenuItem *menuitem, int key)
+{
+	struct MenuItemCvarValuePreset *m;
+	int v, new_v;
+	unsigned int i;
+
+	m = (struct MenuItemCvarValuePreset *)menuitem;
+	v = (int)m->cvar->value;
+	new_v = v;
+
+	switch (key)
+	{
+		case K_ENTER:
+		case K_RIGHTARROW:
+			new_v = m->values[m->numvalues - 1];
+			for (i = 0; i < m->numvalues; i++)
+			{
+				if (m->values[i] > v)
+				{
+					new_v = m->values[i];
+					break;
+				}
+			}
+			break;
+
+		case K_LEFTARROW:
+			new_v = m->values[0];
+			for (i = m->numvalues; i > 0; i--)
+			{
+				if (m->values[i - 1] < v)
+				{
+					new_v = m->values[i - 1];
+					break;
+				}
+			}
+			break;
+
+		default:
+			return;
+	}
+
+	if (new_v != v)
+	{
+		Cvar_SetValue(m->cvar, new_v);
+		S_LocalSound("misc/menu3.wav");
+	}
+}
+
+static struct MenuItem *MenuItemCvarValuePreset_Create(const char *label, cvar_t *cvar, const int *values, unsigned int numvalues)
+{
+	struct MenuItemCvarValuePreset *m;
+
+	m = malloc(sizeof(*m));
+	if (m)
+	{
+		if (MenuItem_SetLabel((struct MenuItem *)m, label, 0))
+		{
+			m->menuitem.delete = MenuItem_Delete;
+			m->menuitem.draw = MenuItemCvarValuePreset_Draw;
+			m->menuitem.handlekey = MenuItemCvarValuePreset_HandleKey;
+			m->menuitem.isselectable = 1;
+			m->menuitem.hidden = 0;
+
+			m->cvar = cvar;
+			m->values = values;
+			m->numvalues = numvalues;
+
+			return (struct MenuItem *)m;
+		}
+
+		free(m);
+	}
+
+	return 0;
+}
+
 static struct MenuItem *MenuItemSpacer_Create()
 {
 	struct MenuItem *menuitem;
@@ -960,7 +1079,7 @@ static struct MenuItem *MenuItemSpacer_Create()
 /* MAIN MENU */
 
 int	m_main_cursor;
-#define	MAIN_ITEMS	5
+#define	MAIN_ITEMS	4
 
 
 static void M_Menu_Main_f()
@@ -1031,13 +1150,7 @@ static void M_Main_Key(int key)
 			M_Menu_Options_f ();
 			break;
 
-	#if defined(_WIN32) || defined(__XMMS__)
 		case 3:
-			M_Menu_MP3_Control_f ();
-			break;
-	#endif
-
-		case 4:
 			M_Menu_Quit_f ();
 			break;
 		}
@@ -1096,17 +1209,33 @@ static void M_Options_Draw()
 
 static char *bindnames[][2] =
 {
-	{ "+attack",    "attack" },
-	{ "+use",       "use" },
-	{ "+jump",      "jump" },
-	{ "+forward",   "move forward" },
-	{ "+back",      "move back" },
-	{ "+moveleft",  "move left" },
-	{ "+moveright", "move right"},
-	{ "+moveup",    "swim up" },
-	{ "+movedown",  "swim down" },
-	{ "impulse 12", "previous weapon" },
-	{ "impulse 10", "next weapon" },
+	{ "+forward",            "move forward" },
+	{ "+back",               "move back" },
+	{ "+moveleft",           "move left" },
+	{ "+moveright",          "move right" },
+	{ "+jump",               "jump" },
+	{ NULL,                  NULL },
+	{ "+weapon_rocket",      "rocket launcher" },
+	{ "+weapon_thunderbolt", "thunderbolt" },
+	{ "+weapon_grenade",     "grenade launcher" },
+	{ NULL,                  NULL },
+	{ "+weapon_axe",         "axe" },
+	{ "+weapon_shotgun",     "shotgun" },
+	{ "+weapon_nailgun",     "nailgun" },
+	{ NULL,                  NULL },
+	{ "+moveup",             "swim up" },
+	{ "+movedown",           "swim down" },
+	{ NULL,                  NULL },
+	{ "+weapon_hook",        "CTF grapple hook" },
+	{ "tossflag",            "CTF toss the flag" },
+	{ "tossrune",            "CTF toss the rune" },
+	{ NULL,                  NULL },
+	{ "impulse 12",          "noob: prev weapon" },
+	{ "impulse 10",          "noob: next weapon" },
+	{ "+attack",             "noob: attack" },
+	{ NULL,                  NULL },
+	{ "+use",                "use" },
+	{ "messagemode",         "say" },
 };
 
 #define	NUMCOMMANDS	(sizeof(bindnames)/sizeof(bindnames[0]))
@@ -1123,11 +1252,10 @@ qboolean Key_IsLeftRightSameBind(int b);
 
 static void M_FindKeysForCommand(char *command, int *twokeys)
 {
-	int count, j, l;
+	int count, j;
 	char *b;
 
 	twokeys[0] = twokeys[1] = -1;
-	l = strlen(command);
 	count = 0;
 
 	for (j = 0 ; j < 256; j++)
@@ -1135,7 +1263,7 @@ static void M_FindKeysForCommand(char *command, int *twokeys)
 		b = keybindings[j];
 		if (!b)
 			continue;
-		if (!strncmp (b, command, l) )
+		if (!strcmp (b, command))
 		{
 			if (count)
 			{
@@ -1161,17 +1289,15 @@ static void M_FindKeysForCommand(char *command, int *twokeys)
 
 static void M_UnbindCommand(char *command)
 {
-	int j, l;
+	int j;
 	char *b;
-
-	l = strlen(command);
 
 	for (j = 0; j < 256; j++)
 	{
 		b = keybindings[j];
 		if (!b)
 			continue;
-		if (!strncmp (b, command, l) )
+		if (!strcmp (b, command))
 			Key_Unbind (j);
 	}
 }
@@ -1194,6 +1320,9 @@ static void M_Keys_Draw()
 	{
 		y = 48 + 8*i;
 
+		if (bindnames[i][0] == NULL)
+			continue;
+
 		M_Print (16, y, bindnames[i][1]);
 
 		l = strlen (bindnames[i][0]);
@@ -1202,25 +1331,25 @@ static void M_Keys_Draw()
 
 		if (keys[0] == -1)
 		{
-			M_Print (156, y, "???");
+			M_Print (172, y, "???");
 		}
 		else
 		{
 			name = Key_KeynumToString (keys[0]);
-			M_Print (156, y, name);
+			M_Print (172, y, name);
 			x = strlen(name) * 8;
 			if (keys[1] != -1)
 			{
-				M_Print (156 + x + 8, y, "or");
-				M_Print (156 + x + 32, y, Key_KeynumToString (keys[1]));
+				M_Print (172 + x + 8, y, "or");
+				M_Print (172 + x + 32, y, Key_KeynumToString (keys[1]));
 			}
 		}
 	}
 
 	if (bind_grab)
-		M_DrawCharacter (142, 48 + keys_cursor*8, '=');
+		M_DrawCharacter (158, 48 + keys_cursor*8, '=');
 	else
-		M_DrawCharacter (142, 48 + keys_cursor*8, 12+((int)(curtime*4)&1));
+		M_DrawCharacter (158, 48 + keys_cursor*8, 12+((int)(curtime*4)&1));
 }
 
 
@@ -1252,29 +1381,37 @@ static void M_Keys_Key(int k)
 	case K_LEFTARROW:
 	case K_UPARROW:
 		S_LocalSound ("misc/menu1.wav");
-		keys_cursor--;
-		if (keys_cursor < 0)
-			keys_cursor = NUMCOMMANDS-1;
+		do {
+			keys_cursor--;
+			if (keys_cursor < 0)
+				keys_cursor = NUMCOMMANDS - 1;
+		} while (bindnames[keys_cursor][0] == NULL);
 		break;
 
 	case K_DOWNARROW:
 	case K_RIGHTARROW:
 		S_LocalSound ("misc/menu1.wav");
-		keys_cursor++;
-		if (keys_cursor >= NUMCOMMANDS)
-			keys_cursor = 0;
+		do {
+			keys_cursor++;
+			if (keys_cursor >= NUMCOMMANDS)
+				keys_cursor = 0;
+		} while (bindnames[keys_cursor][0] == NULL);
 		break;
 
 	case K_HOME:
 	case K_PGUP:
 		S_LocalSound ("misc/menu1.wav");
 		keys_cursor = 0;
+		while (bindnames[keys_cursor][0] == NULL)
+			keys_cursor++;
 		break;
 
 	case K_END:
 	case K_PGDN:
 		S_LocalSound ("misc/menu1.wav");
 		keys_cursor = NUMCOMMANDS - 1;
+		while (bindnames[keys_cursor][0] == NULL)
+			keys_cursor--;
 		break;
 
 	case K_ENTER:		// go into bind mode
@@ -1288,6 +1425,174 @@ static void M_Keys_Key(int k)
 	case K_DEL:				// delete bindings
 		S_LocalSound ("misc/menu2.wav");
 		M_UnbindCommand (bindnames[keys_cursor][0]);
+		break;
+	}
+}
+
+
+//=============================================================================
+/* TEAM COMMUNICATION MENU */
+
+static char *teamcomms_bindnames[][2] =
+{
+	{ "tp_msgreport",   "report" },
+	{ "tp_msgpoint",    "point at location" },
+	{ "tp_msgtook",     "took item" },
+	{ "tp_msgreplace",  "replace" },
+	{ NULL,             NULL },
+	{ "tp_msgquaddead", "quad dead" },
+	{ "tp_msglost",     "lost location" },
+	{ "tp_msgneed",     "need item" },
+	{ "tp_msgkillme",   "kill me" },
+	{ NULL,             NULL },
+	{ "tp_msggetquad",  "get quad" },
+	{ "tp_msggetpent",  "get pent" },
+	{ "tp_msgenemypwr", "enemy quad" },
+	{ "tp_msgteampwr",  "team power" },
+	{ NULL,             NULL },
+	{ "tp_msgyesok",    "yes/ok" },
+	{ "tp_msgnocancel", "no/cancel" },
+	{ "tp_msghelp",     "help" },
+	{ "tp_msgcoming",   "coming" },
+	{ "tp_msgwaiting",  "waiting" },
+	{ "tp_msgsafe",     "safe" },
+	{ "tp_msgslipped",  "enemy slipped" },
+	{ "tp_msgtrick",    "trick" },
+	{ "tp_msgutake",    "you take" },
+	{ NULL,             NULL },
+	{ "messagemode2",   "say (team)" },
+};
+
+#define NUMTEAMCOMMS (sizeof(teamcomms_bindnames)/sizeof(teamcomms_bindnames[0]))
+
+static int teamcomms_cursor;
+static int teamcomms_grab;
+
+static void M_Menu_TeamComms_f()
+{
+	M_EnterMenu (m_teamcomms);
+}
+
+static void M_TeamComms_Draw()
+{
+	int x, y, i, l, keys[2];
+	char *name;
+
+	M_DrawPic(ttl_cstmpic, (320 - 184) / 2, 4, 184, 24);
+
+	if (teamcomms_grab)
+		M_Print (12, 32, "Press a key or button for this action");
+	else
+		M_Print (18, 32, "Enter to change, del to clear");
+
+	for (i = 0; i < NUMTEAMCOMMS; i++)
+	{
+		y = 48 + 8*i;
+
+		if (teamcomms_bindnames[i][0] == NULL)
+			continue;
+
+		M_Print (16, y, teamcomms_bindnames[i][1]);
+
+		l = strlen (teamcomms_bindnames[i][0]);
+
+		M_FindKeysForCommand (teamcomms_bindnames[i][0], keys);
+
+		if (keys[0] == -1)
+		{
+			M_Print (172, y, "???");
+		}
+		else
+		{
+			name = Key_KeynumToString (keys[0]);
+			M_Print (172, y, name);
+			x = strlen(name) * 8;
+			if (keys[1] != -1)
+			{
+				M_Print (172 + x + 8, y, "or");
+				M_Print (172 + x + 32, y, Key_KeynumToString (keys[1]));
+			}
+		}
+	}
+
+	if (teamcomms_grab)
+		M_DrawCharacter (158, 48 + teamcomms_cursor*8, '=');
+	else
+		M_DrawCharacter (158, 48 + teamcomms_cursor*8, 12+((int)(curtime*4)&1));
+}
+
+
+static void M_TeamComms_Key(int k)
+{
+	int keys[2];
+
+	if (teamcomms_grab)
+	{
+		S_LocalSound ("misc/menu1.wav");
+		if (k == K_ESCAPE)
+			teamcomms_grab = false;
+		else if (k != '`')
+			Key_SetBinding (k, teamcomms_bindnames[teamcomms_cursor][0]);
+
+		teamcomms_grab = false;
+		return;
+	}
+
+	switch (k)
+	{
+	case K_BACKSPACE:
+		m_topmenu = m_none;
+	case K_ESCAPE:
+		M_LeaveMenu (m_options);
+		break;
+
+	case K_LEFTARROW:
+	case K_UPARROW:
+		S_LocalSound ("misc/menu1.wav");
+		do {
+			teamcomms_cursor--;
+			if (teamcomms_cursor < 0)
+				teamcomms_cursor = NUMTEAMCOMMS - 1;
+		} while (teamcomms_bindnames[teamcomms_cursor][0] == NULL);
+		break;
+
+	case K_DOWNARROW:
+	case K_RIGHTARROW:
+		S_LocalSound ("misc/menu1.wav");
+		do {
+			teamcomms_cursor++;
+			if (teamcomms_cursor >= NUMTEAMCOMMS)
+				teamcomms_cursor = 0;
+		} while (teamcomms_bindnames[teamcomms_cursor][0] == NULL);
+		break;
+
+	case K_HOME:
+	case K_PGUP:
+		S_LocalSound ("misc/menu1.wav");
+		teamcomms_cursor = 0;
+		while (teamcomms_bindnames[teamcomms_cursor][0] == NULL)
+			teamcomms_cursor++;
+		break;
+
+	case K_END:
+	case K_PGDN:
+		S_LocalSound ("misc/menu1.wav");
+		teamcomms_cursor = NUMTEAMCOMMS - 1;
+		while (teamcomms_bindnames[teamcomms_cursor][0] == NULL)
+			teamcomms_cursor--;
+		break;
+
+	case K_ENTER:
+		M_FindKeysForCommand (teamcomms_bindnames[teamcomms_cursor][0], keys);
+		S_LocalSound ("misc/menu2.wav");
+		if (keys[1] != -1)
+			M_UnbindCommand (teamcomms_bindnames[teamcomms_cursor][0]);
+		teamcomms_grab = true;
+		break;
+
+	case K_DEL:
+		S_LocalSound ("misc/menu2.wav");
+		M_UnbindCommand (teamcomms_bindnames[teamcomms_cursor][0]);
 		break;
 	}
 }
@@ -1632,7 +1937,7 @@ static void M_Video_Draw()
 	static const char *displaytypes[] =
 	{
 		"Windowed",
-		"Fullscreen, clone desktop",
+		"Fullscreen, native desktop",
 		"Fullscreen, custom mode"
 	};
 
@@ -1648,7 +1953,7 @@ static void M_Video_Draw()
 	M_Print(160-(6*8)-4, 36, "Current mode:");
 	if (VID_GetFullscreen())
 	{
-		strlcpy(modestring, "Fullscreen, unknown mode", sizeof(modestring));
+		snprintf(modestring, sizeof(modestring), "Fullscreen, %dx%d", VID_GetWidth(), VID_GetHeight());
 
 		if (curmode && *curmode)
 		{
@@ -1814,14 +2119,14 @@ static void M_Video_Key(int key)
 			if (video_typenum)
 				video_typenum--;
 			else
-				video_typenum = 2;
+				video_typenum = 1;
 			break;
 
 		case K_RIGHTARROW:
 			S_LocalSound ("misc/menu1.wav");
 
 			video_typenum++;
-			if (video_typenum > 2)
+			if (video_typenum > 1)
 				video_typenum = 0;
 
 			break;
@@ -2145,11 +2450,11 @@ static void M_SinglePlayer_Draw()
 //	M_DrawPic(sp_menupic, 72, 32, 232, 64);
 
 	M_DrawTextBox (60, 10*8, 23, 4);
-	M_PrintWhite (88, 12*8, "This client is for");
+	M_PrintWhite (100, 12*8, "classicQ is for");
 	M_PrintWhite (88, 13*8, "Internet play only");
 }
 
-static void M_SinglePlayer_Key(key)
+static void M_SinglePlayer_Key(int key)
 {
 	switch (key)
 	{
@@ -2353,533 +2658,6 @@ void M_MultiPlayer_Draw()
 
 	Menu_Draw(multiplayermenu);
 }
-
-//=============================================================================
-
-#if _WIN32 || defined(__XMMS__)
-
-#define M_MP3_CONTROL_HEADINGROW	8
-#define M_MP3_CONTROL_MENUROW		(M_MP3_CONTROL_HEADINGROW + 56)
-#define M_MP3_CONTROL_COL			104
-#define M_MP3_CONTROL_NUMENTRIES	12
-#define M_MP3_CONTROL_BARHEIGHT		(200 - 24)
-
-static int mp3_cursor = 0;
-static int last_status;
-
-void MP3_Menu_DrawInfo(void);
-static void M_Menu_MP3_Playlist_f(void);
-
-static void M_MP3_Control_Draw()
-{
-	char songinfo_scroll[38 + 1], *s = NULL;
-	int i, scroll_index, print_time;
-	float frac, elapsed, realtime;
-
-	static char lastsonginfo[128], last_title[128];
-	static float initial_time;
-	static int last_length, last_elapsed, last_total, last_shuffle, last_repeat;
-
-
-	M_Print ((320 - 8 * strlen(MP3_PLAYERNAME_ALLCAPS " CONTROL")) >> 1, M_MP3_CONTROL_HEADINGROW, MP3_PLAYERNAME_ALLCAPS " CONTROL");
-
-	M_Print (8, M_MP3_CONTROL_HEADINGROW + 16, "\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f");
-
-
-	if (!MP3_IsActive())
-	{
-		M_PrintWhite((320 - 24 * 8) >> 1, M_MP3_CONTROL_HEADINGROW + 40, "XMMS LIBRARIES NOT FOUND");
-		return;
-	}
-
-	realtime = Sys_DoubleTime();
-
-	last_status = MP3_GetStatus();
-
-	if (last_status == MP3_PLAYING)
-		M_PrintWhite(312 - 7 * 8, M_MP3_CONTROL_HEADINGROW + 8, "Playing");
-	else if (last_status == MP3_PAUSED)
-		M_PrintWhite(312 - 6 * 8, M_MP3_CONTROL_HEADINGROW + 8, "Paused");
-	else if (last_status == MP3_STOPPED)
-		M_PrintWhite(312 - 7 * 8, M_MP3_CONTROL_HEADINGROW + 8, "Stopped");
-	else
-		M_PrintWhite(312 - 11 * 8, M_MP3_CONTROL_HEADINGROW + 8, "Not Running");
-
-	if (last_status == MP3_NOTRUNNING)
-	{
-		M_Print ((320 - 8 * strlen(MP3_PLAYERNAME_ALLCAPS " is not running")) >> 1, 40, MP3_PLAYERNAME_LEADINGCAP " is not running");
-		M_PrintWhite (56, 72, "Press");
-		M_Print (56 + 48, 72, "ENTER");
-		M_PrintWhite (56 + 48 + 48, 72, "to start " MP3_PLAYERNAME_NOCAPS);
-		M_PrintWhite (56, 84, "Press");
-		M_Print (56 + 48, 84, "ESC");
-		M_PrintWhite (56 + 48 + 32, 84, "to exit this menu");
-		M_Print (16, 116, "The variable");
-		M_PrintWhite (16 + 104, 116, mp3_dir.name);
-		M_Print (16 + 104 + 8 * (strlen(mp3_dir.name) + 1), 116, "needs to");
-		M_Print (20, 124, "be set to the path for " MP3_PLAYERNAME_NOCAPS " first");
-		return;
-	}
-
-	s = MP3_Menu_SongtTitle();
-	if (!strcmp(last_title, s = MP3_Menu_SongtTitle()))
-	{
-		elapsed = 3.5 * max(realtime - initial_time - 0.75, 0);
-		scroll_index = (int) elapsed;
-		frac = bound(0, elapsed - scroll_index, 1);
-		scroll_index = scroll_index % last_length;
-	}
-	else
-	{
-		snprintf(lastsonginfo, sizeof(lastsonginfo), "%s  ***  ", s);
-		Q_strncpyz(last_title, s, sizeof(last_title));
-		last_length = strlen(lastsonginfo);
-		initial_time = realtime;
-		frac = scroll_index = 0;
-	}
-
-	if ((!mp3_scrolltitle.value || last_length <= 38 + 7) && mp3_scrolltitle.value != 2)
-	{
-		char name[38 + 1];
-		Q_strncpyz(name, last_title, sizeof(name));
-		M_PrintWhite(max(8, (320 - (last_length - 7) * 8) >> 1), M_MP3_CONTROL_HEADINGROW + 32, name);
-		initial_time = realtime;
-	}
-	else
-	{
-		for (i = 0; i < sizeof(songinfo_scroll) - 1; i++)
-			songinfo_scroll[i] = lastsonginfo[(scroll_index + i) % last_length];
-		songinfo_scroll[sizeof(songinfo_scroll) - 1] = 0;
-		M_PrintWhite(12 -  (int) (8 * frac), M_MP3_CONTROL_HEADINGROW + 32, songinfo_scroll);
-	}
-
-	if (mp3_showtime.value)
-	{
-		MP3_GetOutputtime(&last_elapsed, &last_total);
-		if (last_total == -1)
-			goto menu_items;
-
-		print_time = (mp3_showtime.value == 2) ? last_total - last_elapsed : last_elapsed;
-		M_PrintWhite(8, M_MP3_CONTROL_HEADINGROW + 8, SecondsToMinutesString(print_time));
-
-		if (mp3_showtime.value != 2)
-			M_PrintWhite(48, M_MP3_CONTROL_HEADINGROW + 8, va("/%s", SecondsToMinutesString(last_total)));
-	}
-menu_items:
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW, "Play");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 8, last_status == MP3_PAUSED ? "Unpause" : "Pause");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 16, "Stop");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 24, "Next Track");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 32, "Prev Track");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 40, "Fast Forwd");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 48, "Rewind");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 56, "Volume");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 64, "Shuffle");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 72, "Repeat");
-	M_Print (M_MP3_CONTROL_COL, M_MP3_CONTROL_MENUROW + 88, "View Playlist");
-
-	M_DrawCharacter (M_MP3_CONTROL_COL - 8, M_MP3_CONTROL_MENUROW + mp3_cursor * 8, 12 + ((int)(curtime * 4) & 1));
-
-#warning I broke this
-#if 0
-	if (mp3_volumectrl_active)
-		M_DrawSlider(M_MP3_CONTROL_COL + 96, M_MP3_CONTROL_MENUROW + 56, bound(0, mp3_volume.value, 1));
-	else
-#endif
-		M_PrintWhite (M_MP3_CONTROL_COL + 88, M_MP3_CONTROL_MENUROW + 56, "Disabled");;
-
-	MP3_GetToggleState(&last_shuffle, &last_repeat);
-	M_PrintWhite (M_MP3_CONTROL_COL + 88, M_MP3_CONTROL_MENUROW + 64, last_shuffle ? "On" : "Off");
-	M_PrintWhite (M_MP3_CONTROL_COL + 88, M_MP3_CONTROL_MENUROW + 72, last_repeat ? "On" : "Off");
-
-	M_DrawCharacter (16, M_MP3_CONTROL_BARHEIGHT, 128);
-	for (i = 0; i < 35; i++)
-		M_DrawCharacter (24 + i * 8, M_MP3_CONTROL_BARHEIGHT, 129);
-	M_DrawCharacter (320 - 16, M_MP3_CONTROL_BARHEIGHT, 130);
-	M_DrawCharacter (17 + 286 * ((float) last_elapsed / last_total), M_MP3_CONTROL_BARHEIGHT, 131);
-}
-
-void M_Menu_MP3_Control_Key(int key)
-{
-	float volume;
-
-	if (!MP3_IsActive() || last_status == MP3_NOTRUNNING)
-	{
-		switch(key)
-		{
-			case K_BACKSPACE:
-				m_topmenu = m_none;
-			case K_ESCAPE:
-				M_LeaveMenu (m_main);
-				break;
-			case K_ENTER:
-				if (MP3_IsActive())
-					MP3_Execute_f();
-				break;
-		}
-		return;
-	}
-
-	Con_Suppress();
-
-	switch (key)
-	{
-		case K_BACKSPACE:
-			m_topmenu = m_none;
-		case K_ESCAPE:
-			M_LeaveMenu (m_main);
-			break;
-		case K_HOME:
-		case K_PGUP:
-			mp3_cursor = 0;
-			break;
-		case K_END:
-		case K_PGDN:
-			mp3_cursor = M_MP3_CONTROL_NUMENTRIES - 1;
-			break;
-		case K_DOWNARROW:
-			if (mp3_cursor < M_MP3_CONTROL_NUMENTRIES - 1)
-				mp3_cursor++;
-			if (mp3_cursor == M_MP3_CONTROL_NUMENTRIES - 2)
-				mp3_cursor++;
-			break;
-		case K_UPARROW:
-			if (mp3_cursor > 0)
-				mp3_cursor--;
-			if (mp3_cursor == M_MP3_CONTROL_NUMENTRIES - 2)
-				mp3_cursor--;
-			break;
-		case K_ENTER:
-			switch (mp3_cursor)
-			{
-				case 0:	MP3_Play_f(); break;
-				case 1:	MP3_Pause_f(); break;
-				case 2:	MP3_Stop_f(); break;
-				case 3: MP3_Next_f(); break;
-				case 4:	MP3_Prev_f(); break;
-				case 5: MP3_FastForward_f(); break;
-				case 6: MP3_Rewind_f(); break;
-				case 7: break;
-				case 8: MP3_ToggleShuffle_f(); break;
-				case 9: MP3_ToggleRepeat_f(); break;
-				case 10: break;
-				case 11: M_Menu_MP3_Playlist_f(); break;
-			}
-			break;
-		case K_RIGHTARROW:
-			switch(mp3_cursor)
-			{
-				case 7:
-					volume = bound(0, mp3_volume.value, 1);
-					Cvar_SetValue(&mp3_volume, bound(0, volume + 0.02, 1));
-					break;
-				default:
-					MP3_FastForward_f();
-					break;
-			}
-			break;
-		case K_LEFTARROW:
-			switch(mp3_cursor)
-			{
-				case 7:
-					volume = bound(0, mp3_volume.value, 1);
-					Cvar_SetValue(&mp3_volume, bound(0, volume - 0.02, 1));
-					break;
-				default:
-					MP3_Rewind_f();
-					break;
-			}
-			break;
-		case 'r': MP3_ToggleRepeat_f(); break;
-		case 's': MP3_ToggleShuffle_f(); break;
-		case KP_LEFTARROW: case 'z': MP3_Prev_f(); break;
-		case KP_5: case 'x': MP3_Play_f(); break;
-		case 'c': MP3_Pause_f(); break;
-		case 'v': MP3_Stop_f(); 	break;
-		case 'V': MP3_FadeOut_f();	break;
-		case KP_RIGHTARROW: case 'b': MP3_Next_f(); break;
-		case KP_HOME: MP3_Rewind_f(); break;
-		case KP_PGUP: MP3_FastForward_f(); break;
-	}
-
-	Con_Unsuppress();
-}
-
-static void M_Menu_MP3_Control_f(void){
-	M_EnterMenu (m_mp3_control);
-}
-
-#define PLAYLIST_MAXENTRIES		2048
-#define PLAYLIST_MAXLINES		17
-#define PLAYLIST_HEADING_ROW	8
-
-#define PLAYLIST_MAXTITLE	(32 + 1)
-
-static int playlist_size = 0;
-static int playlist_cursor = 0, playlist_base = 0;
-
-static void Center_Playlist()
-{
-	int current;
-
-	MP3_GetPlaylistInfo(&current, NULL);
-	if (current >= 0 && current < playlist_size)
-	{
-		if (playlist_size - current - 1 < (PLAYLIST_MAXLINES >> 1))
-		{
-			playlist_base = max(0, playlist_size - PLAYLIST_MAXLINES);
-			playlist_cursor = current - playlist_base;
-		}
-		else
-		{
-			playlist_base = max(0, current - (PLAYLIST_MAXLINES >> 1));
-			playlist_cursor = current - playlist_base;
-		}
-	}
-}
-
-static char *playlist_entries[PLAYLIST_MAXENTRIES];
-
-#ifdef _WIN32
-
-void M_Menu_MP3_Playlist_Read()
-{
-	int i, count = 0, skip = 0;
-	long length;
-	char *playlist_buf = NULL;
-
-	for (i = 0; i < playlist_size; i++)
-	{
-		if (playlist_entries[i])
-		{
-			free(playlist_entries[i]);
-			playlist_entries[i] = NULL;
-		}
-	}
-
-	playlist_base = playlist_cursor = playlist_size = 0;
-
-	if ((length = MP3_GetPlaylist(&playlist_buf)) == -1)
-		return;
-
-	playlist_size = MP3_ParsePlaylist_EXTM3U(playlist_buf, length, playlist_entries, PLAYLIST_MAXENTRIES, PLAYLIST_MAXTITLE);
-	free(playlist_buf);
-}
-
-#else
-
-void M_Menu_MP3_Playlist_Read()
-{
-	int i;
-	char *title;
-
-	for (i = 0; i < playlist_size; i++)
-	{
-		if (playlist_entries[i])
-		{
-			free(playlist_entries[i]);
-			playlist_entries[i] = NULL;
-		}
-	}
-
-	playlist_base = playlist_cursor = playlist_size = 0;
-
-	if (MP3_GetStatus() == MP3_NOTRUNNING)
-		return;
-
-	playlist_size = qxmms_remote_get_playlist_length(XMMS_SESSION);
-
-	for (i = 0; i < PLAYLIST_MAXENTRIES && i < playlist_size; i++)
-	{
-		title = qxmms_remote_get_playlist_title(XMMS_SESSION, i);
-		if (strlen(title) > PLAYLIST_MAXTITLE)
-			title[PLAYLIST_MAXTITLE] = 0;
-		playlist_entries[i] = strdup(title);
-		g_free(title);
-	}
-}
-
-#endif
-
-void M_Menu_MP3_Playlist_Draw()
-{
-	int	index, print_time, i;
-	char name[PLAYLIST_MAXTITLE];
-	float realtime;
-
-	static int last_status,last_elapsed, last_total, last_current;
-
-	realtime = Sys_DoubleTime();
-
-	last_status = MP3_GetStatus();
-
-	if (last_status == MP3_NOTRUNNING)
-	{
-		M_Menu_MP3_Control_f();
-		return;
-	}
-
-	M_Print ((320 - 8 * strlen(MP3_PLAYERNAME_ALLCAPS " PLAYLIST")) >> 1, PLAYLIST_HEADING_ROW, MP3_PLAYERNAME_ALLCAPS " PLAYLIST");
-	M_Print (8, PLAYLIST_HEADING_ROW + 16, "\x1d\x1e\x1e\x1f \x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f");
-
-	if (last_status == MP3_PLAYING)
-		M_PrintWhite(312 - 7 * 8, PLAYLIST_HEADING_ROW + 8, "Playing");
-	else if (last_status == MP3_PAUSED)
-		M_PrintWhite(312 - 6 * 8, PLAYLIST_HEADING_ROW + 8, "Paused");
-	else if (last_status == MP3_STOPPED)
-		M_PrintWhite(312 - 7 * 8, PLAYLIST_HEADING_ROW + 8, "Stopped");
-
-	if (mp3_showtime.value)
-	{
-		MP3_GetOutputtime(&last_elapsed, &last_total);
-		if (last_total == -1)
-			goto menu_items;
-
-		print_time = (mp3_showtime.value == 2) ? last_total - last_elapsed : last_elapsed;
-		M_PrintWhite(8, PLAYLIST_HEADING_ROW + 8, SecondsToMinutesString(print_time));
-
-		if (mp3_showtime.value != 2)
-			M_PrintWhite(48, M_MP3_CONTROL_HEADINGROW + 8, va("/%s", SecondsToMinutesString(last_total)));
-	}
-menu_items:
-	if (!playlist_size)
-	{
-		M_Print (92, 32, "Playlist is empty");
-		return;
-	}
-
-	MP3_GetPlaylistInfo(&last_current, NULL);
-
-	for (index = playlist_base; index < playlist_size && index < playlist_base + PLAYLIST_MAXLINES; index++)
-	{
-		char *spaces;
-
-		if (index + 1 < 10)
-			spaces = "  ";
-		else if (index + 1 < 100)
-			spaces = " ";
-		else
-			spaces = "";
-		Q_strncpyz(name, playlist_entries[index], sizeof(name));
-		if (last_current != index)
-			M_Print (16, PLAYLIST_HEADING_ROW + 24 + (index - playlist_base) * 8, va("%s%d %s", spaces, index + 1, name));
-		else
-			M_PrintWhite (16, PLAYLIST_HEADING_ROW + 24 + (index - playlist_base) * 8, va("%s%d %s", spaces, index + 1, name));
-	}
-	M_DrawCharacter (8, PLAYLIST_HEADING_ROW + 24 + playlist_cursor * 8, 12 + ((int)(curtime * 4) & 1));
-
-	M_DrawCharacter (16, M_MP3_CONTROL_BARHEIGHT, 128);
-	for (i = 0; i < 35; i++)
-		M_DrawCharacter (24 + i * 8, M_MP3_CONTROL_BARHEIGHT, 129);
-	M_DrawCharacter (320 - 16, M_MP3_CONTROL_BARHEIGHT, 130);
-	M_DrawCharacter (17 + 286 * ((float) last_elapsed / last_total), M_MP3_CONTROL_BARHEIGHT, 131);
-}
-
-static void M_Menu_MP3_Playlist_Key(int k)
-{
-	Con_Suppress();
-
-	switch (k)
-	{
-         case K_BACKSPACE:
-			m_topmenu = m_none;
-         case K_ESCAPE:
-			M_LeaveMenu (m_mp3_control);
-			break;
-
-		case K_UPARROW:
-			if (playlist_cursor > 0)
-				playlist_cursor--;
-			else if (playlist_base > 0)
-				playlist_base--;
-			break;
-
-		case K_DOWNARROW:
-			if (playlist_cursor + playlist_base < playlist_size - 1)
-			{
-				if (playlist_cursor < PLAYLIST_MAXLINES - 1)
-					playlist_cursor++;
-				else
-					playlist_base++;
-			}
-			break;
-
-		case K_HOME:
-			playlist_cursor = 0;
-			playlist_base = 0;
-			break;
-
-		case K_END:
-			if (playlist_size > PLAYLIST_MAXLINES)
-			{
-				playlist_cursor = PLAYLIST_MAXLINES - 1;
-				playlist_base = playlist_size - playlist_cursor - 1;
-			}
-			else
-			{
-				playlist_base = 0;
-				playlist_cursor = playlist_size - 1;
-			}
-			break;
-
-		case K_PGUP:
-			playlist_cursor -= PLAYLIST_MAXLINES - 1;
-			if (playlist_cursor < 0)
-			{
-				playlist_base += playlist_cursor;
-				if (playlist_base < 0)
-					playlist_base = 0;
-				playlist_cursor = 0;
-			}
-			break;
-
-		case K_PGDN:
-			playlist_cursor += PLAYLIST_MAXLINES - 1;
-			if (playlist_base + playlist_cursor >= playlist_size)
-				playlist_cursor = playlist_size - playlist_base - 1;
-			if (playlist_cursor >= PLAYLIST_MAXLINES)
-			{
-				playlist_base += playlist_cursor - (PLAYLIST_MAXLINES - 1);
-				playlist_cursor = PLAYLIST_MAXLINES - 1;
-				if (playlist_base + playlist_cursor >= playlist_size)
-					playlist_base = playlist_size - playlist_cursor - 1;
-			}
-			break;
-
-		case K_ENTER:
-			if (!playlist_size)
-				break;
-			Cbuf_AddText(va("mp3_playtrack %d\n", playlist_cursor + playlist_base + 1));
-			break;
-		case K_SPACE: M_Menu_MP3_Playlist_Read(); Center_Playlist();break;
-		case 'r': MP3_ToggleRepeat_f(); break;
-		case 's': MP3_ToggleShuffle_f(); break;
-		case KP_LEFTARROW: case 'z': MP3_Prev_f(); break;
-		case KP_5: case 'x': MP3_Play_f(); break;
-		case 'c': MP3_Pause_f(); break;
-		case 'v': MP3_Stop_f(); 	break;
-		case 'V': MP3_FadeOut_f();	break;
-		case KP_RIGHTARROW: case 'b': MP3_Next_f(); break;
-		case KP_HOME: case K_LEFTARROW:  MP3_Rewind_f(); break;
-		case KP_PGUP: case K_RIGHTARROW: MP3_FastForward_f(); break;
-	}
-
-	Con_Unsuppress();
-}
-
-static void M_Menu_MP3_Playlist_f(void){
-	if (!MP3_IsActive())
-	{
-		M_Menu_MP3_Control_f();
-		return;
-	}
-
-	M_Menu_MP3_Playlist_Read();
-	M_EnterMenu (m_mp3_playlist);
-	Center_Playlist();
-}
-
-#endif
 
 //=============================================================================
 /* DEMO MENU */
@@ -3124,6 +2902,118 @@ static void Demo_ReadDirectory()
 	} while ((dstruct = readdir (d)));
 	closedir (d);
 #endif
+
+	// scan ro_data_path for shipped demos, dedupe by name
+	{
+		extern const char *ro_data_path;
+		if (ro_data_path && strcmp(ro_data_path, com_basedir))
+		{
+#ifdef _WIN32
+			HANDLE rh;
+			WIN32_FIND_DATA rfd;
+			rh = FindFirstFile(va("%s%s/*.*", ro_data_path, demo_currentdir), &rfd);
+			if (rh != INVALID_HANDLE_VALUE)
+			{
+				do
+				{
+					if (rfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+					{
+						if (!strcmp(rfd.cFileName, ".") || !strcmp(rfd.cFileName, ".."))
+							continue;
+						type = dt_dir;
+						size = 0;
+						memset(&time, 0, sizeof(time));
+					}
+					else
+					{
+						i = strlen(rfd.cFileName);
+						if (i < 5 ||
+							(Q_strcasecmp(rfd.cFileName + i - 4, ".qwd") &&
+							 Q_strcasecmp(rfd.cFileName + i - 4, ".qwz") &&
+							 Q_strcasecmp(rfd.cFileName + i - 4, ".mvd")))
+							continue;
+						type = dt_file;
+						size = rfd.nFileSizeLow;
+						time = rfd.ftLastWriteTime;
+					}
+
+					Q_strncpyz(name, rfd.cFileName, sizeof(name));
+
+					{
+						int j, dup = 0;
+						for (j = 0; j < demolist_count; j++)
+							if (demolist_data[j].name && !strcmp(demolist_data[j].name, name))
+								{ dup = 1; break; }
+						if (dup)
+							continue;
+					}
+
+					if (demolist_count == MAX_DEMO_FILES)
+						break;
+
+					demolist_data[demolist_count].name = strdup(name);
+					demolist_data[demolist_count].type = type;
+					demolist_data[demolist_count].size = size;
+					demolist_data[demolist_count].time = time;
+					demolist_count++;
+				} while (FindNextFile(rh, &rfd));
+				FindClose(rh);
+			}
+#else
+			DIR *rd;
+			struct dirent *rds;
+			struct stat rfi;
+
+			if ((rd = opendir(va("%s%s", ro_data_path, demo_currentdir))))
+			{
+				while ((rds = readdir(rd)))
+				{
+					stat(va("%s%s/%s", ro_data_path, demo_currentdir, rds->d_name), &rfi);
+
+					if (S_ISDIR(rfi.st_mode))
+					{
+						if (!strcmp(rds->d_name, ".") || !strcmp(rds->d_name, ".."))
+							continue;
+						type = dt_dir;
+						time = size = 0;
+					}
+					else
+					{
+						i = strlen(rds->d_name);
+						if (i < 5 ||
+							(Q_strcasecmp(rds->d_name + i - 4, ".qwd") &&
+							 Q_strcasecmp(rds->d_name + i - 4, ".mvd")))
+							continue;
+						type = dt_file;
+						size = rfi.st_size;
+						time = rfi.st_mtime;
+					}
+
+					Q_strncpyz(name, rds->d_name, sizeof(name));
+
+					{
+						int j, dup = 0;
+						for (j = 0; j < demolist_count; j++)
+							if (demolist_data[j].name && !strcmp(demolist_data[j].name, name))
+								{ dup = 1; break; }
+						if (dup)
+							continue;
+					}
+
+					if (demolist_count == MAX_DEMO_FILES)
+						break;
+
+					demolist_data[demolist_count].name = strdup(name);
+					demolist_data[demolist_count].type = type;
+					demolist_data[demolist_count].size = size;
+					demolist_data[demolist_count].time = time;
+					demolist_count++;
+				}
+				closedir(rd);
+			}
+#endif
+		}
+	}
 
 	if (!demolist_count)
 	{
@@ -3780,25 +3670,34 @@ static void M_GameOptions_Key(int key)
 /* SETUP MENU */
 
 int		setup_cursor = 0;
-int		setup_cursor_table[] = {40, 56, 80, 104, 140};
+int		setup_cursor_table[] = {40, 64, 88, 112, 136, 172};
 
 char	setup_name[16];
 char	setup_team[16];
+char	setup_name_short[16];
 int		setup_oldtop;
 int		setup_oldbottom;
 int		setup_top;
 int		setup_bottom;
 
-extern cvar_t	name, team;
+extern cvar_t	name, team, name_short;
 extern cvar_t	topcolor, bottomcolor;
 
-#define	NUM_SETUP_CMDS	5
+#define	NUM_SETUP_CMDS	6
 
 static void M_Menu_Setup_f()
 {
 	M_EnterMenu (m_setup);
 	Q_strncpyz (setup_name, name.string, sizeof(setup_name));
 	Q_strncpyz (setup_team, team.string, sizeof(setup_team));
+	{
+		const char *src = name_short.string;
+		while (*src == ' ')
+			src++;
+		Q_strncpyz(setup_name_short, src, sizeof(setup_name_short));
+		if (strlen(setup_name_short) > 3)
+			setup_name_short[3] = 0;
+	}
 	setup_top = setup_oldtop = (int)topcolor.value;
 	setup_bottom = setup_oldbottom = (int)bottomcolor.value;
 }
@@ -3812,24 +3711,36 @@ static void M_Setup_Draw()
 	M_DrawTextBox (160, 32, 16, 1);
 	M_PrintWhite (168, 40, setup_name);
 
-	M_Print (64, 56, "Your team");
-	M_DrawTextBox (160, 48, 16, 1);
-	M_PrintWhite (168, 56, setup_team);
+	M_Print (64, 64, "Your team");
+	M_DrawTextBox (160, 56, 16, 1);
+	M_PrintWhite (168, 64, setup_team);
 
-	M_Print (64, 80, "Shirt color");
-	M_Print (64, 104, "Pants color");
+	M_Print (64, 88, "Short name");
+	M_DrawTextBox (160, 80, 16, 1);
+	M_PrintWhite (168, 88, setup_name_short);
 
-	M_DrawTextBox (64, 140-8, 14, 1);
-	M_Print (72, 140, "Accept Changes");
+	M_Print (64, 112, "Shirt color");
+	M_Print (64, 136, "Pants color");
 
-	M_DrawPic(bigboxpic, 160, 64, 72, 72);
+	M_DrawTextBox (64, 172-8, 14, 1);
+	M_Print (72, 172, "Accept Changes");
 
-#if 0
-	M_BuildTranslationTable(setup_top*16, setup_bottom*16);
-	M_DrawTransPicTranslate (172, 72, p);
-#endif
-	#warning Fix this
-	/* M_DrawPic(menuplyr, 172, 72, 48, 56); */
+	M_DrawPic(bigboxpic, 160, 96, 72, 72);
+
+	{
+		struct Picture *plyr = Draw_BuildTranslatedMenuplyr(setup_top * 16, setup_bottom * 16);
+
+		if (plyr)
+		{
+			M_DrawPic(plyr, 174, 106, 44, 52);
+		}
+		else
+		{
+			// no menuplyr.lmp - fall back to colour swatches
+			M_DrawFill(172, 104, 48, 28, 16 * setup_top + 8);
+			M_DrawFill(172, 132, 48, 28, 16 * setup_bottom + 8);
+		}
+	}
 
 	M_DrawCharacter (56, setup_cursor_table [setup_cursor], 12+((int)(curtime*4)&1));
 
@@ -3838,6 +3749,9 @@ static void M_Setup_Draw()
 
 	if (setup_cursor == 1)
 		M_DrawCharacter (168 + 8*strlen(setup_team), setup_cursor_table [setup_cursor], 10+((int)(curtime*4)&1));
+
+	if (setup_cursor == 2)
+		M_DrawCharacter (168 + 8*strlen(setup_name_short), setup_cursor_table [setup_cursor], 10+((int)(curtime*4)&1));
 }
 
 static void M_Setup_Key(int k)
@@ -3875,35 +3789,28 @@ static void M_Setup_Key(int k)
 		break;
 
 	case K_LEFTARROW:
-		if (setup_cursor < 2)
+		if (setup_cursor < 3 || setup_cursor > 4)
 			return;
 		S_LocalSound ("misc/menu3.wav");
-		if (setup_cursor == 2)
-			setup_top = setup_top - 1;
 		if (setup_cursor == 3)
+			setup_top = setup_top - 1;
+		if (setup_cursor == 4)
 			setup_bottom = setup_bottom - 1;
 		break;
 	case K_RIGHTARROW:
-		if (setup_cursor < 2)
+		if (setup_cursor < 3 || setup_cursor > 4)
 			return;
-//forward:
 		S_LocalSound ("misc/menu3.wav");
-		if (setup_cursor == 2)
-			setup_top = setup_top + 1;
 		if (setup_cursor == 3)
+			setup_top = setup_top + 1;
+		if (setup_cursor == 4)
 			setup_bottom = setup_bottom + 1;
 		break;
 
 	case K_ENTER:
-//		if (setup_cursor == 0 || setup_cursor == 1)
-//			return;
-
-//		if (setup_cursor == 2 || setup_cursor == 3)
-//			goto forward;
-
-		// setup_cursor == 4 (OK)
 		Cvar_Set (&name, setup_name);
 		Cvar_Set (&team, setup_team);
+		Cvar_Set (&name_short, va("%3s", setup_name_short));
 		Cvar_Set (&topcolor, va("%i", setup_top));
 		Cvar_Set (&bottomcolor, va("%i", setup_bottom));
 		m_entersound = true;
@@ -3920,6 +3827,11 @@ static void M_Setup_Key(int k)
 		{
 			if (strlen(setup_team))
 				setup_team[strlen(setup_team)-1] = 0;
+		}
+		else if (setup_cursor == 2)
+		{
+			if (strlen(setup_name_short))
+				setup_name_short[strlen(setup_name_short)-1] = 0;
 		}
 		else
 		{
@@ -3943,10 +3855,19 @@ static void M_Setup_Key(int k)
 		if (setup_cursor == 1)
 		{
 			l = strlen(setup_team);
-			if (l < 15)
+			if (l < 4)
 			{
 				setup_team[l + 1] = 0;
 				setup_team[l] = k;
+			}
+		}
+		if (setup_cursor == 2)
+		{
+			l = strlen(setup_name_short);
+			if (l < 3)
+			{
+				setup_name_short[l + 1] = 0;
+				setup_name_short[l] = k;
 			}
 		}
 	}
@@ -3965,7 +3886,7 @@ static void M_Quit_Draw()
 {
 	static char *quitmsg[] =
 	{
-		"0Fodquake "FODQUAKE_VERSION,
+		"0classicQ v"CLASSICQ_VERSION,
 		"0",
 		"1Programming:",
 		"0David Walton",
@@ -3984,7 +3905,7 @@ static void M_Quit_Draw()
 		"0ZQuake by Anton Gavrilov",
 		"0Quakeworld by Id Software",
 		"0",
-		"1Press 'y' to exit Fodquake",
+		"1Press 'y' to exit classicQ",
 		NULL
 	};
 	char **p;
@@ -4023,10 +3944,6 @@ void M_CvarInit()
 #endif
 	Cmd_AddCommand ("menu_multiplayer", M_Menu_MultiPlayer_f);
 	Cmd_AddCommand ("menu_setup", M_Menu_Setup_f);
-#if defined(_WIN32) || defined(__XMMS__)
-	Cmd_AddCommand ("menu_mp3_control", M_Menu_MP3_Control_f);
-	Cmd_AddCommand ("menu_mp3_playlist", M_Menu_MP3_Playlist_f);
-#endif
 	Cmd_AddCommand ("menu_demos", M_Menu_Demos_f);
 	Cmd_AddCommand ("menu_options", M_Menu_Options_f);
 	Cmd_AddCommand ("menu_keys", M_Menu_Keys_f);
@@ -4100,9 +4017,9 @@ void M_Draw()
 	}
 
 	if (scr_centerMenu.value)
-		m_yofs = (menuheight - 200) / 2;
+		m_yofs = (menuheight - 200) / 2 - 16;
 	else
-		m_yofs = 0;
+		m_yofs = -16;
 
 	switch (m_state)
 	{
@@ -4143,6 +4060,10 @@ void M_Draw()
 		M_Keys_Draw ();
 		break;
 
+	case m_teamcomms:
+		M_TeamComms_Draw ();
+		break;
+
 	case m_fps:
 		M_Fps_Draw ();
 		break;
@@ -4172,16 +4093,6 @@ void M_Draw()
 	case m_demos:
 		M_Demos_Draw ();
 		break;
-
-#if defined(_WIN32) || defined(__XMMS__)
-	case m_mp3_control:
-		M_MP3_Control_Draw ();
-		break;
-
-	case m_mp3_playlist:
-		M_Menu_MP3_Playlist_Draw();
-		break;
-#endif
 	}
 
 	if (scr_scaleMenu.value)
@@ -4248,6 +4159,10 @@ void M_Keydown(int key)
 		M_Keys_Key (key);
 		return;
 
+	case m_teamcomms:
+		M_TeamComms_Key (key);
+		return;
+
 	case m_fps:
 		Menu_HandleKey(fpsmenu, key);
 		return;
@@ -4277,16 +4192,6 @@ void M_Keydown(int key)
 	case m_demos:
 		M_Demos_Key (key);
 		break;
-
-#if defined(_WIN32) || defined(__XMMS__)
-	case m_mp3_control:
-		M_Menu_MP3_Control_Key (key);
-		break;
-
-	case m_mp3_playlist:
-		M_Menu_MP3_Playlist_Key (key);
-		break;
-#endif
 	}
 }
 
@@ -4309,19 +4214,24 @@ void M_Init()
 	if (optionsmenu)
 	{
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Customize controls", 0, M_Menu_Keys_f));
-		Menu_AddItem(optionsmenu, MenuItemButton_Create("Go to console", 0, M_Options_GoToConsole));
+		Menu_AddItem(optionsmenu, MenuItemButton_Create("Customize teamplay", 0, M_Menu_TeamComms_f));
+		Menu_AddItem(optionsmenu, MenuItemSpacer_Create());
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Reset to defaults", 0, M_Options_ResetToDefaults));
-		Menu_AddItem(optionsmenu, MenuItemButton_Create("Save configuration", 0, M_Options_SaveConfiguration));
-		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Screen size", 30, 120, 10, &scr_viewsize));
+		Menu_AddItem(optionsmenu, MenuItemButton_Create("Save configuration", 1, M_Options_SaveConfiguration));
+		Menu_AddItem(optionsmenu, MenuItemSpacer_Create());
+		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Sound volume", 0, 0.5, 0.05, &s_volume));
+		Menu_AddItem(optionsmenu, MenuItemSpacer_Create());
+		Menu_AddItem(optionsmenu, MenuItemCvarPosNegBoolean_Create("Invert mouse", &m_pitch));
+		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Mouse speed", 1, 11, 0.5, &sensitivity));
+		Menu_AddItem(optionsmenu, MenuItemSpacer_Create());
+		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("In-game view size", 30, 100, 10, &scr_viewsize));
 		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Gamma", 0.5, 1, -0.05, &v_gamma));
 		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Contrast", 1, 2, 0.1, &v_contrast));
-		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Mouse speed", 1, 11, 0.5, &sensitivity));
-		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("CD music volume", 0, 1, 0.1, &bgmvolume));
-		Menu_AddItem(optionsmenu, MenuItemCvarRange_Create("Sound volume", 0, 1, 0.1, &s_volume));
-		Menu_AddItem(optionsmenu, MenuItemCvarPosNegBoolean_Create("Invert mouse", &m_pitch));
-		Menu_AddItem(optionsmenu, MenuItemCvarBoolean_Create("Use old status bar", &cl_sbar, 0));
-		Menu_AddItem(optionsmenu, MenuItemCvarBoolean_Create("HUD on left side", &cl_hudswap, 0));
-		Menu_AddItem(optionsmenu, MenuItemButton_Create("FPS settings", 0, M_Menu_Fps_f));
+		{
+			extern cvar_t cl_maxfps;
+			static const int maxfps_presets[] = {77, 154, 231, 308, 385, 462, 616, 770, 924, 1001};
+			Menu_AddItem(optionsmenu, MenuItemCvarValuePreset_Create("fps limit", &cl_maxfps, maxfps_presets, sizeof(maxfps_presets)/sizeof(maxfps_presets[0])));
+		}
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Video modes", 0, M_Menu_Video_f));
 
 		Menu_AddItem(optionsmenu, optionsmenu_usemouse = MenuItemCvarBoolean_Create("Use mouse", &in_grab_windowed_mouse, 0));

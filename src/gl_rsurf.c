@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	BLOCK_HEIGHT	128
 
 #define MAX_LIGHTMAP_SIZE	(32 * 32)
-#define	MAX_LIGHTMAPS		64
+#define	MAX_LIGHTMAPS		512		/* vanilla Quake had 64 */
 
 extern cvar_t r_drawflat_enable;
 
@@ -1414,7 +1414,7 @@ static void R_RecursiveWorldNode(model_t *model, unsigned int nodenum, int clipf
 	mplane_t *plane, *clipplane;
 	msurface_t *surf;
 	unsigned int surfnum;
-	unsigned short *mark;
+	unsigned int *mark;
 	unsigned char flags;
 	mleaf_t *pleaf;
 	float dot;
@@ -1629,7 +1629,7 @@ void R_MarkLeaves (void)
 				if (node->visframe == r_visframecount)
 					break;
 				node->visframe = r_visframecount;
-				if (node->parentnum == 0xffff)
+				if (node->parentnum == 0xffffffff)
 					break;
 
 				node = NODENUM_TO_NODE(cl.worldmodel, node->parentnum);

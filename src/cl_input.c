@@ -41,7 +41,7 @@ cvar_t	cl_nodelta = {"cl_nodelta","0"};
 cvar_t	cl_c2spps = {"cl_c2spps","0"};
 cvar_t	cl_c2sImpulseBackup = {"cl_c2sImpulseBackup","3"};
 
-cvar_t	cl_smartjump = {"cl_smartjump", "0"};
+cvar_t	cl_smartjump = {"cl_smartjump", "1"};
 
 static cvar_t	cl_upspeed = {"cl_upspeed","400"};
 static cvar_t	cl_forwardspeed = {"cl_forwardspeed","400",CVAR_ARCHIVE};
@@ -721,11 +721,6 @@ void CL_SendCmd (void)
 	{
 		pps_balance = 0;
 		dropcount = 0;
-	}
-
-	if (cls.download && (cls.ftexsupported&FTEX_CHUNKEDDOWNLOADS))
-	{
-		CL_RequestNextFTEDownloadChunk(&buf);
 	}
 
 	// deliver the message

@@ -200,6 +200,8 @@ qboolean CL_CheckOrDownloadFile (char *filename)
 
 	strcpy (cls.downloadname, filename);
 	Com_Printf ("Downloading %s...\n", cls.downloadname);
+	cls.downloadrate = 0;
+	cls.downloadstarttime = Sys_DoubleTime();
 
 	// download to a temp name, and only rename
 	// to the real name when done, so if interrupted
@@ -406,216 +408,274 @@ static qboolean CL_OpenDownloadFile()
 	return false;
 }
 
-static void CL_FinishDownloadFile()
+// Close download: rename .tmp on completion, else delete.
+void CL_CleanupActiveDownload(qboolean completed)
 {
 	char oldn[MAX_OSPATH], newn[MAX_OSPATH];
-	int r;
 
-	fclose (cls.download);
+	if (!cls.download)
+		return;
 
-	// rename the temp file to its final name
-	if (strcmp(cls.downloadtempname, cls.downloadname))
+	fclose(cls.download);
+	cls.download = NULL;
+
+	if (strncmp(cls.downloadtempname, "skins/", 6))
+		snprintf(oldn, sizeof(oldn), "%s/%s", cls.gamedir, cls.downloadtempname);
+	else
+		snprintf(oldn, sizeof(oldn), "qw/%s", cls.downloadtempname);
+
+	if (completed)
 	{
-		if (strncmp(cls.downloadtempname,"skins/",6))
+		if (strcmp(cls.downloadtempname, cls.downloadname))
 		{
-			snprintf(oldn, sizeof(oldn), "%s/%s", cls.gamedir, cls.downloadtempname);
-			snprintf(newn, sizeof(newn), "%s/%s", cls.gamedir, cls.downloadname);
+			if (strncmp(cls.downloadtempname, "skins/", 6))
+				snprintf(newn, sizeof(newn), "%s/%s", cls.gamedir, cls.downloadname);
+			else
+				snprintf(newn, sizeof(newn), "qw/%s", cls.downloadname);
+
+			if (rename(oldn, newn))
+				Com_Printf("failed to rename.\n");
 		}
-		else
-		{
-			snprintf(oldn, sizeof(oldn), "qw/%s", cls.downloadtempname);
-			snprintf(newn, sizeof(newn), "qw/%s", cls.downloadname);
-		}
-		r = rename (oldn, newn);
-		if (r)
-			Com_Printf ("failed to rename.\n");
+	}
+	else
+	{
+		remove(oldn);
 	}
 
-	cls.download = NULL;
 	cls.downloadpercent = 0;
-
-	// get another file if needed
-
-	CL_RequestNextDownload ();
 }
 
-#define FTEFILECHUNKSIZE 1024
-#define FTEMAXCHUNKS 64
-
-static int downloadchunkrequestsequencenumber[FTEMAXCHUNKS];
-static unsigned char downloadchunkdata[FTEMAXCHUNKS*FTEFILECHUNKSIZE];
-static unsigned int downloadchunkwindowoffset;
-static unsigned int downloadchunkcycle;
-static unsigned int downloadfirstchunk;
-static unsigned int downloadlastchunknumber;
-static unsigned int downloadchunksinbuffer;
-
-static void CL_GetFTEDownloadChunk(sizebuf_t *buf, int chunknumber)
+static void CL_FinishDownloadFile()
 {
-	MSG_WriteByte(buf, clc_stringcmd);
-	MSG_WriteString(buf, va("nextdl %d", chunknumber));
-
-	downloadchunkrequestsequencenumber[((chunknumber-downloadfirstchunk)+downloadchunkwindowoffset)%FTEMAXCHUNKS] = cls.netchan.outgoing_sequence;
+	CL_CleanupActiveDownload(true);
+	CL_RequestNextDownload();
 }
 
-void CL_RequestNextFTEDownloadChunk(sizebuf_t *buf)
+#define FTECHUNKSIZE  1024
+#define FTEMAXBLOCKS  1024	/* must be a power of two */
+
+static int chunked_download_number;	/* bumped per file header, never reset */
+static int chunked_size;
+static int chunked_received_bytes;
+static int chunked_received[FTEMAXBLOCKS];
+static int chunked_first_block;
+static int chunked_block_cycle;
+
+static int CL_NextChunkToRequest(void)
 {
-	unsigned int i, j;
-	int oldestrequest;
-	int oldestrequestage;
-	int age;
+	int i, b;
+	int total_blocks = (chunked_size + FTECHUNKSIZE - 1) / FTECHUNKSIZE;
 
-	oldestrequest = -1;
-	oldestrequestage = 0;
-
-	for(i=downloadchunkwindowoffset,j=0;j<FTEMAXCHUNKS&&downloadfirstchunk+j<=downloadlastchunknumber;j++,i++)
+	for (i = 0; i < FTEMAXBLOCKS; i++)
 	{
-		i%= FTEMAXCHUNKS;
-		if (downloadchunkrequestsequencenumber[i] == -1)
+		chunked_block_cycle++;
+		b = (chunked_block_cycle & (FTEMAXBLOCKS - 1)) + chunked_first_block;
+
+		if (b >= total_blocks)
+			continue;
+
+		if (!chunked_received[b & (FTEMAXBLOCKS - 1)])
+			return b;
+	}
+
+	return -1;
+}
+
+static void CL_SendChunkRequest(int chunknum)
+{
+#ifdef NETQW
+	char buf[64];
+	int n;
+
+	if (!cls.netqw)
+		return;
+
+	n = snprintf(buf, sizeof(buf), "%cnextdl %d %d %d", clc_stringcmd,
+		chunknum, cls.downloadpercent, chunked_download_number);
+	if (n > 0 && (size_t)n < sizeof(buf))
+	{
+		if (chunknum < 0)
+			NetQW_AppendReliableBuffer(cls.netqw, buf, n + 1);
+		else
+			NetQW_AppendUnreliableBuffer(cls.netqw, buf, n + 1);
+	}
+#else
+	MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
+	MSG_WriteString(&cls.netchan.message,
+		va("nextdl %d %d %d", chunknum, cls.downloadpercent,
+		   chunked_download_number));
+#endif
+}
+
+void CL_SendChunkedDownloadRequests(void)
+{
+	enum { chunks_per_tick = 30 };	/* matches mvdsv sv_downloadchunksperframe cap */
+	int i, j;
+
+	if (!cls.download)
+		return;
+
+	if (!(cls.ftexsupported & FTEX_CHUNKEDDOWNLOADS))
+		return;
+
+#ifdef NETQW
+	if (cls.netqw)
+	{
+		static double last_push_time;
+		double now = Sys_DoubleTime();
+		double interval = NetQW_GetFrameTime(cls.netqw) / 1000000.0;
+
+		if (now - last_push_time < interval)
+			return;
+		last_push_time = now;
+	}
+#endif
+
+	for (j = 0; j < chunks_per_tick; j++)
+	{
+		i = CL_NextChunkToRequest();
+		if (i < 0)
 		{
-			CL_GetFTEDownloadChunk(buf, j+downloadfirstchunk);
+			CL_SendChunkRequest(-1);
+			cls.downloadpercent = 100;
+			CL_FinishDownloadFile();
 			return;
 		}
+		CL_SendChunkRequest(i);
+	}
+}
 
-		age = cls.netchan.incoming_sequence-downloadchunkrequestsequencenumber[i];
-
-		if (downloadchunkrequestsequencenumber[i] != -2 && age > oldestrequestage)
-		{
-			oldestrequestage = age;
-			oldestrequest = j;
-		}
+static void CL_ChunkedDownloadHeader(int filesize, const char *filename)
+{
+	if (cls.download)
+	{
+		if (filesize != -3)
+			Com_Printf("cls.download shouldn't have been set\n");
+		fclose(cls.download);
+		cls.download = NULL;
+		cls.downloadpercent = 0;
 	}
 
-	if (oldestrequest != -1)
-		CL_GetFTEDownloadChunk(buf, downloadfirstchunk+oldestrequest);
+	if (cls.demoplayback)
+		return;
+
+	if (filesize < 0)
+	{
+		switch (filesize)
+		{
+		case -3:
+			Com_DPrintf("Server cancelled download of \"%s\"\n", filename);
+			break;
+		case -2:
+			Com_Printf("Server refused upload of \"%s\"\n", filename);
+			break;
+		default:
+			Com_Printf("\"%s\" not found on server\n", filename);
+			break;
+		}
+		CL_RequestNextDownload();
+		return;
+	}
+
+	if (!CL_OpenDownloadFile())
+	{
+		CL_RequestNextDownload();
+		return;
+	}
+
+	cls.downloadpercent = 0;
+	chunked_download_number++;
+	chunked_size = filesize;
+	chunked_received_bytes = 0;
+	chunked_first_block = 0;
+	chunked_block_cycle = -1;	/* first request asks for block 0 */
+	memset(chunked_received, 0, sizeof(chunked_received));
+}
+
+static void CL_ChunkedDownloadData(int chunknum)
+{
+	char data[FTECHUNKSIZE];
+
+	MSG_ReadData(data, FTECHUNKSIZE);
+
+	if (!cls.download || cls.demoplayback)
+		return;
+
+	if (chunknum < chunked_first_block)
+		return;
+
+	if (chunknum - chunked_first_block >= FTEMAXBLOCKS)
+		return;
+
+	if (chunked_received[chunknum & (FTEMAXBLOCKS - 1)])
+		return;
+
+	chunked_received_bytes += FTECHUNKSIZE;
+	chunked_received[chunknum & (FTEMAXBLOCKS - 1)] = 1;
+
+	while (chunked_received[chunked_first_block & (FTEMAXBLOCKS - 1)])
+	{
+		chunked_received[chunked_first_block & (FTEMAXBLOCKS - 1)] = 0;
+		chunked_first_block++;
+	}
+
+	fseek(cls.download, chunknum * FTECHUNKSIZE, SEEK_SET);
+	if (chunked_size - chunknum * FTECHUNKSIZE < FTECHUNKSIZE)
+		fwrite(data, 1, chunked_size - chunknum * FTECHUNKSIZE, cls.download);
+	else
+		fwrite(data, 1, FTECHUNKSIZE, cls.download);
+
+	if (chunked_size > 0)
+	{
+		// 64-bit math to avoid int32 wrap on files >21 MB
+		cls.downloadpercent = (int)(((long long)chunked_received_bytes * 100) / chunked_size);
+	}
+
+	{
+		double elapsed = Sys_DoubleTime() - cls.downloadstarttime;
+		if (elapsed > 0)
+			cls.downloadrate = (int)(chunked_received_bytes / 1024.0 / elapsed);
+	}
 }
 
 static void CL_ParseFTEChunkedDownload()
 {
-	int chunk;
-	static int filesize;
+	int chunknum = MSG_ReadLong();
 
-	chunk = MSG_ReadLong();
-
-	if (chunk < 0)
+	if (chunknum < 0)
 	{
-		char *filename;
-
-		filesize = MSG_ReadLong();
-		filename = MSG_ReadString();
-
-		printf("Filename: \"%s\", length: %d\n", filename, filesize);
-
-		if (!cls.download)
-		{
-			if (strcmp(filename, cls.downloadname) == 0)
-			{
-				if (filesize > 0)
-				{
-					if (CL_OpenDownloadFile())
-					{
-						MSG_WriteByte(&cls.netchan.message, clc_stringcmd);
-						MSG_WriteString(&cls.netchan.message, va("nextdl %d", 1));
-
-						memset(downloadchunkrequestsequencenumber, 0xff, sizeof(downloadchunkrequestsequencenumber));
-						downloadchunkwindowoffset = 0;
-						downloadchunkcycle = 0;
-						downloadfirstchunk = 0;
-						downloadlastchunknumber = (filesize>0?filesize-1:filesize)/FTEFILECHUNKSIZE;
-						return;
-					}
-					else
-					{
-						Com_Printf("Unable to open output file\n");
-					}
-				}
-				else
-				{
-					if (filesize == -2)
-					{
-						Com_Printf("Server refused upload of \"%s\"\n", filename);
-					}
-					else
-					{
-						Com_Printf("\"%s\" not found on server\n", filename);
-					}
-				}
-			}
-			else
-			{
-				Com_Printf("Server sent the wrong file\n");
-			}
-		}
-		else
-		{
-			Com_Printf("Server sent us a new file while we were still receiving old one\n");
-		}
-
-		CL_RequestNextDownload();
+		int filesize = MSG_ReadLong();
+		char *filename = MSG_ReadString();
+		CL_ChunkedDownloadHeader(filesize, filename);
+		return;
 	}
-	else if (cls.download)
+
+	CL_ChunkedDownloadData(chunknum);
+}
+
+// OOB chunks (mvdsv burst format)
+void CL_ParseChunkedDownloadOOB(void)
+{
+	int dlnum;
+
+	if (msg_readcount + 4 > cl_net_message.cursize)
+		return;
+
+	dlnum = MSG_ReadLong();
+	if (dlnum != chunked_download_number)
 	{
-		if (chunk >= downloadfirstchunk)
-		{
-			if (chunk < downloadfirstchunk+FTEMAXCHUNKS)
-			{
-				if (downloadchunkrequestsequencenumber[((chunk-downloadfirstchunk)+downloadchunkwindowoffset)%FTEMAXCHUNKS] != -2)
-				{
-					unsigned int numreadychunks;
-					downloadchunksinbuffer++;
-
-					downloadchunkrequestsequencenumber[((chunk-downloadfirstchunk)+downloadchunkwindowoffset)%FTEMAXCHUNKS] = -2;
-					MSG_ReadData(downloadchunkdata+((((chunk-downloadfirstchunk)+downloadchunkwindowoffset)%FTEMAXCHUNKS)*FTEFILECHUNKSIZE), FTEFILECHUNKSIZE);
-
-					cls.downloadpercent = (100*(downloadfirstchunk+downloadchunksinbuffer))/(downloadlastchunknumber+1);
-
-					numreadychunks = 0;
-					while(numreadychunks < FTEMAXCHUNKS && downloadchunkrequestsequencenumber[(numreadychunks+downloadchunkwindowoffset)%FTEMAXCHUNKS] == -2)
-					{
-						downloadchunkrequestsequencenumber[(numreadychunks+downloadchunkwindowoffset)%FTEMAXCHUNKS] = -1;
-						numreadychunks++;
-					}
-
-					if (numreadychunks)
-					{
-						if (downloadchunkwindowoffset+numreadychunks > FTEMAXCHUNKS)
-						{
-							fwrite(downloadchunkdata+downloadchunkwindowoffset*FTEFILECHUNKSIZE, 1, (FTEMAXCHUNKS-downloadchunkwindowoffset)*FTEFILECHUNKSIZE, cls.download);
-							fwrite(downloadchunkdata, 1, (numreadychunks-(FTEMAXCHUNKS-downloadchunkwindowoffset))*FTEFILECHUNKSIZE, cls.download);
-						}
-						else
-						{
-							unsigned int size = numreadychunks*FTEFILECHUNKSIZE;
-
-							if ((downloadfirstchunk*FTEFILECHUNKSIZE)+size > filesize)
-								size = filesize-(downloadfirstchunk*FTEFILECHUNKSIZE);
-
-							fwrite(downloadchunkdata+(downloadchunkwindowoffset*FTEFILECHUNKSIZE), 1, size, cls.download);
-						}
-
-						downloadchunkwindowoffset+= numreadychunks;
-						downloadchunkwindowoffset%= FTEMAXCHUNKS;
-						downloadfirstchunk+= numreadychunks;
-						downloadchunksinbuffer-= numreadychunks;
-
-						if (downloadfirstchunk == downloadlastchunknumber+1)
-						{
-							CL_FinishDownloadFile();
-						}
-					}
-					return;
-				}
-			}
-		}
-
-		msg_readcount+= 1024;
+		Com_DPrintf("Dropping stale OOB chunk (dlnum %d vs %d)\n",
+			dlnum, chunked_download_number);
+		return;
 	}
-	else
-	{
-		char buf[FTEFILECHUNKSIZE];
 
-		MSG_ReadData(buf, FTEFILECHUNKSIZE);
-	}
+	if (msg_readcount + 1 > cl_net_message.cursize)
+		return;
+
+	if (MSG_ReadByte() != svc_download)
+		return;
+
+	CL_ParseFTEChunkedDownload();
 }
 
 static void CL_ParseQWDownload (void)
@@ -661,6 +721,13 @@ static void CL_ParseQWDownload (void)
 
 	fwrite (cl_net_message.data + msg_readcount, 1, size, cls.download);
 	msg_readcount += size;
+
+	{
+		double elapsed = Sys_DoubleTime() - cls.downloadstarttime;
+		long bytes = ftell(cls.download);
+		if (elapsed > 0 && bytes > 0)
+			cls.downloadrate = (int)(bytes / 1024.0 / elapsed);
+	}
 
 	if (percent != 100)
 	{
@@ -798,11 +865,15 @@ void CL_ParseServerData (void)
 		protover = MSG_ReadLong();
 		if (protover == QW_PROTOEXT_FTEX)
 		{
-			cls.ftexsupported = MSG_ReadLong();
+			cls.ftexsupported = MSG_ReadLong() & FTEX_SUPPORTED;
 		}
 		else if (protover == QW_PROTOEXT_FTE2)
 		{
-			cls.fte2supported = MSG_ReadLong();
+			cls.fte2supported = MSG_ReadLong() & FTE2_SUPPORTED;
+		}
+		else if (protover == QW_PROTOEXT_MVD1)
+		{
+			cls.mvdprotocolextensions1 = MSG_ReadLong() & MVD1_SUPPORTED;
 		}
 		else
 		{
@@ -810,9 +881,16 @@ void CL_ParseServerData (void)
 		}
 	}
 
+	if (cls.ftexsupported & FTEX_TRANS)
+		Com_Printf("Protocol: modern (FTE_PEXT2)\n");
+	else if (cls.ftexsupported)
+		Com_Printf("Protocol: extended QW\n");
+	else
+		Com_Printf("Protocol: vanilla 2.40\n");
+
 	if (protover != PROTOCOL_VERSION &&
 		!(cls.demoplayback && (protover == 26 || protover == 27 || protover == 28)))
-		Host_Error ("Server returned version %i (0x%08x), not %i\nYou probably need to upgrade.\nCheck http://www.fodquake.net/", protover, protover, PROTOCOL_VERSION);
+		Host_Error ("Server returned version %i (0x%08x), not %i\nYou probably need to upgrade.\nCheck https://classicq.github.io/", protover, protover, PROTOCOL_VERSION);
 
 	cl.protoversion = protover;
 	cl.servercount = MSG_ReadLong ();
@@ -1001,14 +1079,14 @@ void CL_ParseSoundlist (void)
 	Sound_NextDownload ();
 }
 
-void CL_ParseModellist(void)
+void CL_ParseModellist(int extended)
 {
 	char buf[128];
 	int	i, nummodels, n;
 	char *str;
 
 	// precache models and note certain default indexes
-	nummodels = MSG_ReadByte();
+	nummodels = extended ? (int)(unsigned short)MSG_ReadShort() : MSG_ReadByte();
 
 	while (1)
 	{
@@ -1045,16 +1123,18 @@ void CL_ParseModellist(void)
 
 	if ((n = MSG_ReadByte()))
 	{
+		// preserve high byte for MODELDBL resume past 255
+		int next_index = (nummodels & 0xff00) + n;
 #ifdef NETQW
 		if (cls.netqw)
 		{
-			i = snprintf(buf, sizeof(buf), "%cmodellist %i %i", clc_stringcmd, cl.servercount, n);
+			i = snprintf(buf, sizeof(buf), "%cmodellist %i %i", clc_stringcmd, cl.servercount, next_index);
 			if (i < sizeof(buf))
 				NetQW_AppendReliableBuffer(cls.netqw, buf, i + 1);
 		}
 #else
 		MSG_WriteByte (&cls.netchan.message, clc_stringcmd);
-		MSG_WriteString (&cls.netchan.message, va("modellist %i %i", cl.servercount, n));
+		MSG_WriteString (&cls.netchan.message, va("modellist %i %i", cl.servercount, next_index));
 #endif
 
 		return;
@@ -1432,6 +1512,7 @@ void CL_ProcessServerInfo (void)
 	// movement vars for prediction
 	cl.bunnyspeedcap = Q_atof(Info_ValueForKey(cl.serverinfo, "pm_bunnyspeedcap"));
 	movevars.slidefix = Q_atoi(Info_ValueForKey(cl.serverinfo, "pm_slidefix"));
+	movevars.airstep = Q_atoi(Info_ValueForKey(cl.serverinfo, "pm_airstep"));
 	movevars.ktjump = *(p = Info_ValueForKey(cl.serverinfo, "pm_ktjump")) ?
 		Q_atof(p) : cl.teamfortress ? 0 : 0.5;
 
@@ -1682,7 +1763,46 @@ void CL_ParseFTESpawnBaseLine2()
 
 	bits = MSG_ReadShort();
 
-	CL_ParseDelta(&nullentitystate, &cl_entities[bits&512].baseline, bits);
+	// entity number is low 9 bits (mask 511)
+	CL_ParseDelta(&nullentitystate, &cl_entities[bits&511].baseline, bits);
+}
+
+void CL_ParseFTESpawnStatic2(void)
+{
+	struct static_entity *sent;
+	entity_t *ent;
+	entity_state_t es;
+	unsigned short bits;
+
+	bits = MSG_ReadShort();
+	es = nullentitystate;
+	CL_ParseDelta(&nullentitystate, &es, bits);
+
+	sent = malloc(sizeof(*sent));
+	if (!sent)
+		Host_Error("CL_ParseFTESpawnStatic2: out of memory");
+
+	memset(sent, 0, sizeof(*sent));
+	ent = &sent->ent;
+
+	ent->model = cl.model_precache[es.modelindex];
+	ent->frame = es.frame;
+	ent->skinnum = es.skinnum;
+	VectorCopy(es.origin, ent->origin);
+	VectorCopy(es.angles, ent->angles);
+
+	R_AddEfrags(ent);
+
+	if (cl.first_static == 0)
+	{
+		cl.first_static = sent;
+		cl.last_static = sent;
+	}
+	else
+	{
+		cl.last_static->next = sent;
+		cl.last_static = sent;
+	}
 }
 
 void CL_ParseQizmoVoice (void)
@@ -1989,7 +2109,14 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_modellist:
-			CL_ParseModellist ();
+			CL_ParseModellist (0);
+			break;
+
+		case svcfte_modellistshort:
+			if (!(cls.ftexsupported & FTEX_MODELDOUBLE))
+				Host_Error("Got unexpected svcfte_modellistshort");
+
+			CL_ParseModellist (1);
 			break;
 
 		case svc_soundlist:
@@ -2034,6 +2161,13 @@ void CL_ParseServerMessage (void)
 			MSG_ReadByte(); /* Discard the colour */
 			strlcpy(cl_lightstyle[i].map,  MSG_ReadString(), sizeof(cl_lightstyle[i].map));
 			cl_lightstyle[i].length = strlen(cl_lightstyle[i].map);
+			break;
+
+		case svcfte_spawnstatic2:
+			if (!(cls.ftexsupported & FTEX_SPAWNBASELINE2))
+				Host_Error("Got unexpected svcfte_spawnstatic2");
+
+			CL_ParseFTESpawnStatic2();
 			break;
 
 		case svcfte_spawnbaseline2:

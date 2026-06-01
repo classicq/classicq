@@ -249,7 +249,7 @@ static qboolean cl_ruleset_callback(cvar_t *var, char *string)
 	return false;
 }
 
-static cvar_t cl_ruleset = { "cl_ruleset", "default", 0, cl_ruleset_callback };
+static cvar_t cl_ruleset = { "cl_ruleset", "eql", 0, cl_ruleset_callback };
 
 void Ruleset_Activate()
 {

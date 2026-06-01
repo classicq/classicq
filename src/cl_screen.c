@@ -39,11 +39,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "config.h"
 
 #include "server_browser.h"
-#include "context_sensitive_tab.h"
 #include "lua.h"
 
 #ifdef GLQUAKE
 #include "gl_local.h"
+#include "gl_framebuffer.h"
+#include "gl_post_process.h"
 #else
 #include "r_local.h"
 #endif
@@ -83,9 +84,9 @@ unsigned int scr_clearnotifylines;
 
 float			oldscreensize, oldfov, oldsbar;
 cvar_t			scr_viewsize = {"viewsize", "100", CVAR_ARCHIVE};
-cvar_t			scr_fov = {"fov", "90", CVAR_ARCHIVE};	// 10 - 140
-cvar_t			scr_consize = {"scr_consize", "0.75"};
-cvar_t			scr_conspeed = {"scr_conspeed", "1000"};
+cvar_t			scr_fov = {"fov", "115", CVAR_ARCHIVE};	// 10 - 140
+cvar_t			scr_consize = {"scr_consize", "0.6"};
+cvar_t			scr_conspeed = {"scr_conspeed", "999999999"};
 cvar_t			scr_centertime = {"scr_centertime", "2"};
 cvar_t			scr_showram = {"showram", "1"};
 cvar_t			scr_showturtle = {"showturtle", "0"};
@@ -94,11 +95,11 @@ cvar_t			scr_printspeed = {"scr_printspeed", "8"};
 qboolean OnChange_scr_allowsnap(cvar_t *, char *);
 cvar_t			scr_allowsnap = {"scr_allowsnap", "0", 0, OnChange_scr_allowsnap};
 
-cvar_t			scr_clock = {"cl_clock", "0"};
-cvar_t			scr_clock_x = {"cl_clock_x", "0"};
-cvar_t			scr_clock_y = {"cl_clock_y", "-1"};
+cvar_t			scr_clock = {"cl_clock", "2"};
+cvar_t			scr_clock_x = {"cl_clock_x", "-1"};
+cvar_t			scr_clock_y = {"cl_clock_y", "0"};
 
-cvar_t			scr_gameclock = {"cl_gameclock", "0"};
+cvar_t			scr_gameclock = {"cl_gameclock", "3"};
 cvar_t			scr_gameclock_x = {"cl_gameclock_x", "0"};
 cvar_t			scr_gameclock_y = {"cl_gameclock_y", "-3"};
 
@@ -106,13 +107,13 @@ cvar_t			scr_democlock = {"cl_democlock", "0"};
 cvar_t			scr_democlock_x = {"cl_democlock_x", "0"};
 cvar_t			scr_democlock_y = {"cl_democlock_y", "-2"};
 
-cvar_t			show_speed = {"show_speed", "0"};
+cvar_t			show_speed = {"show_speed", "1"};
 cvar_t			show_speed_x = {"show_speed_x", "-1"};
-cvar_t			show_speed_y = {"show_speed_y", "1"};
+cvar_t			show_speed_y = {"show_speed_y", "2"};
 
-cvar_t			show_fps = {"show_fps", "0"};
-cvar_t			show_fps_x = {"show_fps_x", "-5"};
-cvar_t			show_fps_y = {"show_fps_y", "-1"};
+cvar_t			show_fps = {"show_fps", "1"};
+cvar_t			show_fps_x = {"show_fps_x", "-1"};
+cvar_t			show_fps_y = {"show_fps_y", "1"};
 
 cvar_t			show_framestddev = {"show_framestddev", "0"};
 cvar_t			show_framestddev_x = {"show_framestddev_x", "-5"};
@@ -126,7 +127,7 @@ cvar_t			gl_triplebuffer = {"gl_triplebuffer", "1", CVAR_ARCHIVE};
 #endif
 
 cvar_t			scr_autoid		= {"scr_autoid", "0"};
-cvar_t			scr_coloredText = {"scr_coloredText", "1"};
+cvar_t			scr_coloredText = {"scr_coloredText", "0"};
 
 qboolean		scr_initialized;                // ready to draw
 
@@ -841,24 +842,24 @@ static void SCR_DrawDownload(unsigned int vislines)
 	x = linewidth - ((linewidth * 7) / 40);
 	i = linewidth/3;
 
-	if (x - i < 11)
+	if (x - i < 20)
 		return;
 
 	textlength = strlen(text);
 
 	if (strlen(text) > i)
 	{
-		barlength = x - i - 11;
+		barlength = x - i - 20;
 		dotlength = 3;
 		textlength = i;
 	}
 	else
 	{
-		barlength = x - strlen(text) - 8;
+		barlength = x - strlen(text) - 17;
 		dotlength = 0;
 	}
 
-	if (textlength + dotlength + 2 + 1 + barlength + 1 + 5 + 1 > sizeof(dlbar))
+	if (textlength + dotlength + 2 + 1 + barlength + 1 + 14 + 1 > sizeof(dlbar))
 		return;
 
 	memcpy(dlbar, text, textlength);
@@ -880,7 +881,14 @@ static void SCR_DrawDownload(unsigned int vislines)
 			dlbar[i++] = '\x81';
 	dlbar[i++] = '\x82';
 
-	sprintf(dlbar + i, " %02d%%", cls.downloadpercent);
+	if (cls.ftexsupported & FTEX_CHUNKEDDOWNLOADS)
+	{
+		sprintf(dlbar + i, " %4d KB/s", cls.downloadrate);
+	}
+	else
+	{
+		sprintf(dlbar + i, " %02d%%\x87", cls.downloadpercent);
+	}
 
 	// draw it
 	Draw_String(8, vislines - 22 + 8, dlbar);
@@ -940,8 +948,6 @@ void SCR_DrawConsole(void)
 	{
 		scr_copyeverything = 1;
 		Con_DrawConsole(scr_con_current);
-		Context_Sensitive_Tab_Completion_Draw();
-		Context_Sensitive_Tab_Completion_Notification(false);
 		clearconsole = 0;
 
 		if (cls.download)
@@ -1229,6 +1235,11 @@ void SCR_DrawElements(void) {
 //This is called every frame, and can also be called explicitly to flush text to the screen.
 //WARNING: be very careful calling this from elsewhere, because the refresh needs almost the entire 256k of stack space!
 void SCR_UpdateScreen (void) {
+	extern cvar_t v_gamma, v_contrast;
+	extern float v_blend[4];
+	extern qboolean V_SoftGammaActive(void);
+	qboolean soft_gamma;
+
 	if (!scr_initialized)
 		return;                         // not initialized yet
 
@@ -1286,11 +1297,15 @@ void SCR_UpdateScreen (void) {
 	glwidth = VID_GetWidth();
 	glheight = VID_GetHeight();
 
+	soft_gamma = V_SoftGammaActive() && GL_FBO_Init(glwidth, glheight);
+	if (soft_gamma)
+		GL_FBO_Bind();
+
 	SCR_SetUpToDrawConsole ();
 
 	V_RenderView ();
 
-	SCR_SetupAutoID ();	
+	SCR_SetupAutoID ();
 
 	GL_Set2D ();
 
@@ -1312,7 +1327,12 @@ void SCR_UpdateScreen (void) {
 
 	V_UpdatePalette(false);
 
-	SCR_CheckAutoScreenshot();	
+	SCR_CheckAutoScreenshot();
+
+	if (soft_gamma) {
+		GL_FBO_Unbind();
+		GL_PostProcess_Draw(GL_FBO_GetColorTexture(), v_gamma.value, v_contrast.value, v_blend);
+	}
 
 	VID_Update(0);
 }
@@ -1504,9 +1524,45 @@ static image_format_t SShot_FormatForName(char *name) {
 #ifdef GLQUAKE
 
 extern unsigned short ramps[3][256];
-//applies hwgamma to RGB data
+extern qboolean V_SoftGammaActive(void);
+
+// CPU mirror of post-process shader for screenshots
+static void applySoftGammaToBuffer(byte *buffer, int size) {
+	extern cvar_t v_gamma, v_contrast;
+	extern float v_blend[4];
+	float g  = v_gamma.value;
+	float ct = v_contrast.value;
+	float ba = v_blend[3];
+	float br = v_blend[0], bgv = v_blend[1], bb = v_blend[2];
+	int i;
+
+	for (i = 0; i < size; i += 3) {
+		float r = buffer[i + 0] / 255.0f;
+		float gv = buffer[i + 1] / 255.0f;
+		float b = buffer[i + 2] / 255.0f;
+
+		r  = r  * (1.0f - ba) + br  * ba;
+		gv = gv * (1.0f - ba) + bgv * ba;
+		b  = b  * (1.0f - ba) + bb  * ba;
+
+		r  = powf(fmaxf(r  * ct, 0.0f), g);
+		gv = powf(fmaxf(gv * ct, 0.0f), g);
+		b  = powf(fmaxf(b  * ct, 0.0f), g);
+
+		buffer[i + 0] = (byte)(r  > 1.0f ? 255 : r  * 255.0f);
+		buffer[i + 1] = (byte)(gv > 1.0f ? 255 : gv * 255.0f);
+		buffer[i + 2] = (byte)(b  > 1.0f ? 255 : b  * 255.0f);
+	}
+}
+
+//applies hwgamma (or its soft-mode equivalent) to RGB data
 static void applyHWGamma(byte *buffer, int size) {
 	int i;
+
+	if (V_SoftGammaActive()) {
+		applySoftGammaToBuffer(buffer, size);
+		return;
+	}
 
 	if (VID_HWGammaSupported()) {
 		for (i = 0; i < size; i += 3) {
@@ -1522,6 +1578,7 @@ int SCR_Screenshot(char *name) {
 	int success = SSHOT_FAILED;
 	byte *buffer;
 	image_format_t format;
+	qboolean read_from_fbo;
 
 	name = (*name == '/') ? name + 1 : name;
 	format = SShot_FormatForName(name);
@@ -1530,7 +1587,16 @@ int SCR_Screenshot(char *name) {
 
 	buffer = Q_Malloc (buffersize);
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
-	glReadPixels (glx, gly, glwidth, glheight, GL_RGB, GL_UNSIGNED_BYTE, buffer); 
+
+	// read from FBO instead of post-swap back buffer
+	read_from_fbo = V_SoftGammaActive() && GL_FBO_GetID() != 0;
+	if (read_from_fbo)
+		qglBindFramebuffer(GL_READ_FRAMEBUFFER, GL_FBO_GetID());
+
+	glReadPixels (glx, gly, glwidth, glheight, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+
+	if (read_from_fbo)
+		qglBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
 #if USE_PNG
 	if (format == IMAGE_PNG) {
@@ -1662,7 +1728,7 @@ void SCR_ScreenShot_f (void) {
 			Q_strncpyz(ext, DEFAULT_SSHOT_FORMAT, 4);
 
 		for (i = 0; i < 999; i++) {
-			snprintf(name, sizeof(name), "fodquake%03i.%s", i, ext);
+			snprintf(name, sizeof(name), "classicq%03i.%s", i, ext);
 			if (!(f = fopen (va("%s/%s/%s", com_basedir, sshot_dir, name), "rb")))
 				break;  // file doesn't exist
 			fclose(f);
@@ -1708,7 +1774,7 @@ void SCR_RSShot_f (void) {
 
 	Com_Printf ("Remote screenshot requested.\n");
 
-	filename = "fodquake/temp/__rsshot__";
+	filename = "classicq/temp/__rsshot__";
 
 #ifdef GLQUAKE
 

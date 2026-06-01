@@ -28,7 +28,6 @@ Foundation,	Inc., 59 Temple	Place -	Suite 330, Boston, MA  02111-1307, USA.
 #include "utils.h"
 #include "teamplay.h"
 
-#include "context_sensitive_tab.h"
 #include "tokenize_string.h"
 
 void Key_WriteBindings (FILE *);
@@ -574,9 +573,9 @@ static void Config_PrintPreamble(FILE *f)
 	Config_PrintBorder(f);
 	Config_PrintLine(f, "", 3);
 	Config_PrintLine(f, "", 3);
-	Config_PrintLine(f, "F O D Q U A K E   C O N F I G U R A T I O N", 3);
+	Config_PrintLine(f, "C L A S S I C Q   C O N F I G U R A T I O N", 3);
 	Config_PrintLine(f, "", 3);
-	Config_PrintLine(f, "http://www.fodquake.net/", 3);
+	Config_PrintLine(f, "https://classicq.github.io/", 3);
 	Config_PrintLine(f, "", 3);
 	Config_PrintLine(f, "", 3);
 	Config_PrintBorder(f);
@@ -617,7 +616,7 @@ static void DumpConfig(char *name)
 	FILE	*f;
 	char	*outfile, *newlines = "\n\n\n\n";
 
-	outfile = va("%s/fodquake/configs/%s", com_basedir, name);
+	outfile = va("%s/classicq/configs/%s", com_basedir, name);
 	if (!(f	= fopen	(outfile, "w")))
 	{
 		FS_CreatePath(outfile);
@@ -713,7 +712,7 @@ static void SaveConfig_f(void)
 
 	if (cfg_backup.value)
 	{
-		filename_ext = va("%s/fodquake/configs/%s", com_basedir, filename);
+		filename_ext = va("%s/classicq/configs/%s", com_basedir, filename);
 		if ((f = fopen(filename_ext, "r")))
 		{
 			fclose(f);
@@ -757,7 +756,7 @@ void LoadConfig_f(void)
 	}
 	filename = COM_SkipPath(Cmd_Argv(1));
 	COM_ForceExtension(filename, ".cfg");
-	if (!(f = fopen(va("%s/fodquake/configs/%s", com_basedir, filename), "r")))
+	if (!(f = fopen(va("%s/classicq/configs/%s", com_basedir, filename), "r")))
 	{
 		Com_Printf("Couldn't load config %s\n", filename);
 		return;
@@ -774,113 +773,6 @@ void LoadConfig_f(void)
 	Cbuf_AddText ("cl_warncmd 0\n");
 	Cbuf_AddText(va("exec configs/%s\n", filename));
 	Cbuf_AddText ("cl_warncmd 1\n");
-}
-
-struct cstc_cfginfo
-{
-	struct directory_list *dl;
-	qboolean *checked;
-	qboolean initialized;
-};
-
-static int cstc_cfg_load_get_data(struct cst_info *self, int remove)
-{
-	struct cstc_cfginfo *data;
-	const char * const cfg_endings[] = { ".cfg", NULL};
-
-	if (!self)
-		return 1;
-
-	data = (struct cstc_cfginfo *)self->data;
-
-	if (data)
-	{
-		Util_Dir_Delete(data->dl);
-		free(data->checked);
-		free(data);
-		self->data = NULL;
-	}
-
-	if (remove)
-		return 0;
-
-	if ((data = calloc(1, sizeof(*data))))
-	{
-		if ((data->dl = Util_Dir_Read(va("%s/fodquake/configs/", com_basedir), 1, 1, cfg_endings)))
-		{
-			if (data->dl->entries == 0)
-			{
-				cstc_cfg_load_get_data(self, 1);
-				return 1;
-			}
-			self->data = (void *)data;
-			return 0;
-		}
-		free(data);
-	}
-
-	return 1;
-}
-
-static int cstc_cfg_load_check(char *entry, struct tokenized_string *ts)
-{
-	int i;
-
-	for (i=0; i<ts->count; i++)
-	{
-		if (Util_strcasestr(entry, ts->tokens[i]) == NULL)
-			return 0;
-	}
-	return 1;
-}
-
-static int cstc_cfg_load_get_results(struct cst_info *self, int *results, int get_result, int result_type, char **result)
-{
-	struct cstc_cfginfo *data;
-	int count, i;
-
-	if (self->data == NULL)
-		return 1;
-
-	data = (struct cstc_cfginfo *)self->data;
-
-	if (results || data->initialized == false)
-	{
-		if (data->checked)
-			free(data->checked);
-
-		if ((data->checked = calloc(data->dl->entry_count, sizeof(qboolean))) == NULL)
-			return 1;
-
-		for (i=0, count=0; i<data->dl->entry_count; i++)
-		{
-			if (cstc_cfg_load_check(data->dl->entries[i].name, self->tokenized_input))
-			{
-				data->checked[i] = true;
-				count++;
-			}
-		}
-
-		if (results)
-			*results = count;
-		data->initialized = true;
-		return 0;
-	}
-
-	if (result == NULL)
-		return 0;
-
-	for (i=0, count=-1; i<data->dl->entry_count; i++)
-	{
-		if (data->checked[i] == true)
-			count++;
-		if (count == get_result)
-		{
-			*result = data->dl->entries[i].name;
-			return 0;
-		}
-	}
-	return 1;
 }
 
 void ConfigManager_CvarInit(void)
@@ -903,7 +795,5 @@ void ConfigManager_CvarInit(void)
 	Cvar_Register(&cfg_backup);
 
 	Cvar_ResetCurrentGroup();
-
-	CSTC_Add("cfg_load cfg_save", NULL, &cstc_cfg_load_get_results, &cstc_cfg_load_get_data, NULL, CSTC_MULTI_COMMAND | CSTC_EXECUTE | CSTC_HIGLIGHT_INPUT, "arrow up/down to navigate");
 }
 

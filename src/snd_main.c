@@ -71,7 +71,7 @@ cvar_t s_nosound = {"s_nosound", "0"};
 cvar_t s_precache = {"s_precache", "1"};
 cvar_t s_loadas8bit = {"s_loadas8bit", "0"};
 cvar_t s_khz = {"s_khz", "11"};
-cvar_t s_ambientlevel = {"s_ambientlevel", "0.3"};
+cvar_t s_ambientlevel = {"s_ambientlevel", "1"};
 cvar_t s_ambientfade = {"s_ambientfade", "100"};
 cvar_t s_noextraupdate = {"s_noextraupdate", "0"};
 cvar_t s_show = {"s_show", "0"};
@@ -86,34 +86,12 @@ struct SoundDriver
 	SoundCvarInitFunc *cvarinit;
 };
 
-SoundCvarInitFunc AHI_CvarInit;
-SoundCvarInitFunc ALSA_CvarInit;
-SoundCvarInitFunc CoreAudio_CvarInit;
-SoundCvarInitFunc DS7_CvarInit;
-SoundCvarInitFunc OSS_CvarInit;
-SoundCvarInitFunc PulseAudio_CvarInit;
-SoundCvarInitFunc SNDIO_CvarInit;
-SoundCvarInitFunc WaveOut_CvarInit;
-
-SoundInitFunc AHI_Init;
-SoundInitFunc ALSA_Init;
-SoundInitFunc CoreAudio_Init;
-SoundInitFunc DS7_Init;
-SoundInitFunc OSS_Init;
-SoundInitFunc PulseAudio_Init;
-SoundInitFunc SNDIO_Init;
-SoundInitFunc WaveOut_Init;
+SoundCvarInitFunc SNDSDL_CvarInit;
+SoundInitFunc SNDSDL_Init;
 
 const static struct SoundDriver sounddrivers[] =
 {
-	{ "AHI", &AHI_Init, &AHI_CvarInit },
-	{ "SNDIO", &SNDIO_Init, &SNDIO_CvarInit },
-	{ "OSS", &OSS_Init, &OSS_CvarInit },
-	{ "ALSA", &ALSA_Init, &ALSA_CvarInit },
-	{ "PulseAudio", &PulseAudio_Init, &PulseAudio_CvarInit },
-	{ "DS7", &DS7_Init, &DS7_CvarInit },
-	{ "WaveOut", &WaveOut_Init, &WaveOut_CvarInit },
-	{ "CoreAudio", &CoreAudio_Init, &CoreAudio_CvarInit },
+	{ "SDL", &SNDSDL_Init, &SNDSDL_CvarInit },
 };
 
 #define NUMSOUNDDRIVERS (sizeof(sounddrivers)/sizeof(*sounddrivers))
