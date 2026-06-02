@@ -113,8 +113,6 @@ jobs:
 
           mkdir -p assets-base
           cp -r assets/. assets-base/
-          # Strip per-platform binaries - they come from artifacts/ in the per-OS blocks
-          rm -f assets-base/classicq
           rm -f assets-base/classicq-windows-amd64.exe
           rm -f assets-base/classicq-linux-amd64
           rm -rf assets-base/classicq-macos-arm64.app

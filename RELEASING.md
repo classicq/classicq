@@ -25,7 +25,7 @@ Within a major:
 2. Commit, PR.
 3. Signed tag + push:
    ```
-   git tag -sS v3.0.1 -m "classicQ v3.0.1"
+   git tag -s v3.0.1 -m "classicQ v3.0.1"
    git push origin v3.0.1
    ```
 4. CI builds and uploads release.
