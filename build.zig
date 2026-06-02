@@ -19,13 +19,18 @@ pub fn build(b: *std.Build) void {
         .root_module = root_mod,
     });
 
-    const sdl_dep = b.dependency("SDL", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    root_mod.linkLibrary(sdl_dep.artifact("SDL2"));
-    root_mod.addIncludePath(sdl_dep.path("include"));
-    root_mod.addIncludePath(sdl_dep.path("include-pregen"));
+    // SDL: system on Linux, source on Windows/macOS.
+    if (target.result.os.tag == .linux) {
+        root_mod.linkSystemLibrary("SDL2", .{});
+    } else {
+        const sdl_dep = b.dependency("SDL", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        root_mod.linkLibrary(sdl_dep.artifact("SDL2"));
+        root_mod.addIncludePath(sdl_dep.path("include"));
+        root_mod.addIncludePath(sdl_dep.path("include-pregen"));
+    }
 
     const zlib_dep = b.dependency("zlib", .{
         .target = target,
@@ -47,6 +52,7 @@ pub fn build(b: *std.Build) void {
 
     const c_flags = [_][]const u8{
         "-std=c23",
+        "-D_GNU_SOURCE",
         "-DCLIENTONLY",
         "-DNETQW",
         "-DGLQUAKE",

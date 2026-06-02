@@ -15,7 +15,7 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 #define QW_PLATFORM     "Windows"
-#elif defined(linux)
+#elif defined(__linux__)
 #define QW_PLATFORM     "Linux"
 #elif defined(__APPLE__)
 #define QW_PLATFORM     "macOS"
