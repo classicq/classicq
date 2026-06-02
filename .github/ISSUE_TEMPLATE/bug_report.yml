@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a functional bug, crash, or regression.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: classicQ version
+      description: From the banner (`classicQ v3.x.x`) or the `version` command.
+      placeholder: e.g. 3.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: e.g. Windows 11, Ubuntu 24.04, macOS 15
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the bug. Reproduction steps if applicable.
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: Server (optional)
+      description: If reproducible on a specific server, paste address.
+      placeholder: e.g. de.quake.world:27501
