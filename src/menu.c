@@ -2811,22 +2811,10 @@ static void Demo_ReadDirectory()
 #ifdef _WIN32
 	h = FindFirstFile (va("%s%s/*.*", com_basedir, demo_currentdir), &fd);
 	if (h == INVALID_HANDLE_VALUE)
-	{
-		demolist_data[demolist_count].name = strdup ("Error reading directory");
-		demolist_data[demolist_count].type = dt_msg;
-		demolist_count++;
-		Demo_SortDemos();
-		return;
-	}
+		goto secondary;
 #else
 	if (!(d = opendir(va("%s%s", com_basedir, demo_currentdir))))
-	{
-		demolist_data[demolist_count].name = strdup ("Error reading directory");
-		demolist_data[demolist_count].type = dt_msg;
-		demolist_count++;
-		Demo_SortDemos();
-		return;
-	}
+		goto secondary;
 	dstruct = readdir (d);
 #endif
 
@@ -2903,6 +2891,7 @@ static void Demo_ReadDirectory()
 	closedir (d);
 #endif
 
+secondary:
 	// scan ro_data_path for shipped demos, dedupe by name
 	{
 		extern const char *ro_data_path;
