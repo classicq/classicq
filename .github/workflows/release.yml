@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           for i in 1 2 3; do
-            zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseFast && break || {
+            zig build -Dtarget=${{ matrix.target }} -Drelease=true && break || {
               echo "::warning::Build attempt $i failed, retrying"
               rm -rf .zig-cache
               sleep 2
