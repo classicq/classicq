@@ -1,0 +1,34 @@
+changelog:
+  categories:
+    - title: New features
+      labels:
+        - enhancement
+        - feature
+    - title: Bug fixes
+      labels:
+        - bug
+        - fix
+    - title: Protocol & compatibility
+      labels:
+        - protocol
+        - compat
+    - title: Build & CI
+      labels:
+        - build
+        - ci
+    - title: Documentation
+      labels:
+        - docs
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - dependencies
+      - chore
+    authors:
+      - dependabot
+      - dependabot[bot]
+      - github-actions
+      - github-actions[bot]

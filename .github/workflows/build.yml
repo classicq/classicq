@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+      - 'third_party/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+      - 'third_party/**'
+      - '.github/workflows/build.yml'
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux-gnu
+            artifact: classicq-linux-amd64
+            artifact_path: assets/classicq-linux-amd64
+          - os: ubuntu-latest
+            target: x86_64-windows-gnu
+            artifact: classicq-windows-amd64.exe
+            artifact_path: assets/classicq-windows-amd64.exe
+          - os: macos-latest
+            target: aarch64-macos
+            artifact: classicq-macos-arm64
+            artifact_path: assets/classicq-macos-arm64.app
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          version: 0.16.0
+
+      - name: Install Linux system dependencies
+        if: matrix.target == 'x86_64-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Cache Zig packages
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/zig
+          key: zig-pkg-${{ matrix.target }}-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-pkg-${{ matrix.target }}-
+
+      - name: Build
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseFast && break || {
+              echo "::warning::Build attempt $i failed, retrying"
+              rm -rf .zig-cache
+              sleep 2
+            }
+          done
+
+      - name: Smoke test
+        if: matrix.target == 'x86_64-linux-gnu'
+        run: |
+          file assets/classicq-linux-amd64
+          ldd assets/classicq-linux-amd64 || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_path }}
+          retention-days: 7
+          if-no-files-found: error
