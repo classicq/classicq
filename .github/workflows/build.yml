@@ -27,20 +27,23 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
+            platform: linux-amd64
             target: x86_64-linux-gnu
             artifact: classicq-linux-amd64
             artifact_path: assets/classicq-linux-amd64
           - os: ubuntu-latest
+            platform: windows-amd64
             target: x86_64-windows-gnu
             artifact: classicq-windows-amd64.exe
             artifact_path: assets/classicq-windows-amd64.exe
           - os: macos-latest
+            platform: macos-arm64
             target: aarch64-macos
             artifact: classicq-macos-arm64
             artifact_path: assets/classicq-macos-arm64.app
@@ -74,8 +77,12 @@ jobs:
       - name: Build
         shell: bash
         run: |
+          BUILD_ARGS="-Drelease=true"
+          if [ "${{ matrix.platform }}" = "windows-amd64" ]; then
+            BUILD_ARGS="-Dtarget=${{ matrix.target }} $BUILD_ARGS"
+          fi
           for i in 1 2 3; do
-            zig build -Dtarget=${{ matrix.target }} -Drelease=true && break || {
+            zig build $BUILD_ARGS && break || {
               echo "::warning::Build attempt $i failed, retrying"
               rm -rf .zig-cache
               sleep 2
