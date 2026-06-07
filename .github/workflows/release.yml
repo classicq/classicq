@@ -216,6 +216,7 @@ jobs:
           git clone --depth 1 git@github.com:classicq/classicq.github.io.git site
           install -m 644 releases.json site/releases.json
           cd site
+          git add releases.json
           git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
-            commit -am "Update releases.json for $TAG" || { echo "No changes"; exit 0; }
+            commit -m "Update releases.json for $TAG" || { echo "No changes"; exit 0; }
           git push
