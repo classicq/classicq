@@ -76,6 +76,8 @@ jobs:
     name: Package and create release
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.reltype.outputs.prerelease }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -91,6 +93,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Determine release type
+        id: reltype
+        run: |
+          if [[ "$GITHUB_REF" =~ -(rc|beta|alpha) ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Pick release body
         id: body
@@ -166,10 +177,44 @@ jobs:
           body_path: ${{ steps.body.outputs.PATH }}
           generate_release_notes: ${{ steps.body.outputs.AUTOGEN }}
           draft: true
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          prerelease: ${{ steps.reltype.outputs.prerelease }}
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit "${GITHUB_REF#refs/tags/}" --repo "${{ github.repository }}" --draft=false
+
+  update-page:
+    name: Update download page
+    needs: package-and-release
+    if: needs.package-and-release.outputs.prerelease == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build releases.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VER="${TAG#v}"
+          BASE="https://github.com/classicq/classicq/releases/download/${TAG}"
+          jq -n \
+            --arg ver "$VER" \
+            --arg win "$BASE/classicQ-$VER-windows-amd64.zip" \
+            --arg lin "$BASE/classicQ-$VER-linux-amd64.zip" \
+            --arg mac "$BASE/classicQ-$VER-macos-arm64.zip" \
+            '{version: $ver, downloads: {windows: $win, linux: $lin, macos: $mac}}' \
+            > releases.json
+      - name: Deploy to site repo
+        env:
+          DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          install -m 600 /dev/stdin ~/.ssh/key <<< "$DEPLOY_KEY"
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/key -o IdentitiesOnly=yes"
+          git clone --depth 1 git@github.com:classicq/classicq.github.io.git site
+          install -m 644 releases.json site/releases.json
+          cd site
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+            commit -am "Update releases.json for $TAG" || { echo "No changes"; exit 0; }
+          git push
