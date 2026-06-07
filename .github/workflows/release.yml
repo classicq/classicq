@@ -188,7 +188,7 @@ jobs:
   update-page:
     name: Update download page
     needs: package-and-release
-    if: needs.package-and-release.outputs.prerelease == 'true'
+    if: needs.package-and-release.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Build releases.json
