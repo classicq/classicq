@@ -209,6 +209,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
           TAG: ${{ github.ref_name }}
         run: |
+          mkdir -p ~/.ssh
           install -m 600 /dev/stdin ~/.ssh/key <<< "$DEPLOY_KEY"
           ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/key -o IdentitiesOnly=yes"
