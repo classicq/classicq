@@ -235,7 +235,7 @@ void COM_Shutdown (void);
 char *COM_SkipPath(char *pathname);
 void COM_StripExtension(char *s);
 void COM_CopyAndStripExtension(const char *in, char *out, unsigned int maxlength);
-void COM_DefaultExtension(char *path, char *extension);
+void COM_DefaultExtension(char *path, char *extension, size_t path_size);
 void COM_ForceExtension(char *path, char *extension);
 
 char	*va(char *format, ...) PRINTFWARNING(1, 2);

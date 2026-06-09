@@ -1700,7 +1700,7 @@ qboolean TP_LoadLocFile (char *path, qboolean quiet)
 		return false;
 	}
 	strlcat(locname, path, sizeof(locname));
-	COM_DefaultExtension(locname, ".loc");
+	COM_DefaultExtension(locname, ".loc", sizeof(locname));
 
 	if (!(buf = (char *) FS_LoadMallocFile(locname)))
 	{
@@ -3242,7 +3242,7 @@ qboolean TP_CheckSoundTrigger (char *str)
 				if (!snd_initialized)
 					return false;
 
-				COM_DefaultExtension (soundname, ".wav");
+				COM_DefaultExtension (soundname, ".wav", sizeof(soundname));
 
 				// make sure we have it on disk (FIXME)
 				if (!FS_FileExists(va("sound/%s", soundname)))

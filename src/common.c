@@ -406,7 +406,7 @@ char *COM_FileExtension (char *in)
 
 
 //If path doesn't have a .EXT, append extension (extension should include the .)
-void COM_DefaultExtension (char *path, char *extension)
+void COM_DefaultExtension (char *path, char *extension, size_t path_size)
 {
 	char *src;
 
@@ -419,7 +419,7 @@ void COM_DefaultExtension (char *path, char *extension)
 		src--;
 	}
 
-	strlcat(path, extension, MAX_OSPATH);
+	strlcat(path, extension, path_size);
 }
 
 //If path doesn't have an extension or has a different extension, append(!) specified extension

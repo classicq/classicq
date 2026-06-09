@@ -90,7 +90,7 @@ void SV_SaveGame_f (void) {
 	}
 
 	Q_snprintfz (fname, sizeof(fname), "%s/save/%s", com_gamedir, Cmd_Argv(1));
-	COM_DefaultExtension (fname, ".sav");
+	COM_DefaultExtension (fname, ".sav", sizeof(fname));
 	
 	Com_Printf ("Saving game to %s...\n", fname);
 	if (!(f = fopen (fname, "w"))) {		
@@ -140,7 +140,7 @@ void SV_LoadGame_f (void) {
 	}
 
 	Q_snprintfz(name, sizeof(name), "%s/save/%s", com_gamedir, Cmd_Argv(1));
-	COM_DefaultExtension (name, ".sav");
+	COM_DefaultExtension (name, ".sav", sizeof(name));
 
 	Com_Printf ("Loading game from %s...\n", name);
 	if (!(f = fopen (name, "r"))) {

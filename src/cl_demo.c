@@ -1310,7 +1310,7 @@ void CL_Play_f (void)
 		for (s = ext; *s && !playbackfile; s++)
 		{
 			Q_strncpyz (name, Cmd_Argv(1), sizeof(name) - 4);
-			COM_DefaultExtension (name, *s);
+			COM_DefaultExtension (name, *s, sizeof(name));
 
 			if (!strncmp(name, "../", 3) || !strncmp(name, "..\\", 3))
 			{
