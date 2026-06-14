@@ -1007,7 +1007,7 @@ void TP_PrintHiddenMessage(char *buf)
 				*s = ' ';
 	}
 
-	Com_Printf(TP_ParseWhiteText (msg, team, offset));
+	Com_Printf("%s", TP_ParseWhiteText (msg, team, offset));
 }
 
 #define ISDEAD(i) ( (i) >= 41 && (i) <= 102 )
