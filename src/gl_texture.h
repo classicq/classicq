@@ -71,5 +71,6 @@ extern int currenttexture;
 
 extern int texture_extension_number;
 extern int gl_max_size_default;
+extern int gl_filter_max;
 
 #endif	//__GL_TEXTURE_H

@@ -120,7 +120,7 @@ static struct glmode modes[] =
 #define GLMODE_NUMODES	(sizeof(modes) / sizeof(*modes))
 
 static int gl_filter_min = GL_LINEAR_MIPMAP_NEAREST;
-static int gl_filter_max = GL_LINEAR;
+int gl_filter_max = GL_LINEAR;
 
 static qboolean OnChange_gl_texturemode(cvar_t *var, char *string)
 {
