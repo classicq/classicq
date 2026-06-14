@@ -682,6 +682,7 @@ static void DumpConfig(char *name)
 static void SaveConfig_f(void)
 {
 	char *filename, *filename_ext, *backupname_ext;
+	char namebuf[MAX_OSPATH];
 	FILE *f;
 	static int call_count = 0;
 
@@ -693,8 +694,9 @@ static void SaveConfig_f(void)
 
 	if (Cmd_Argc() == 2)
 	{
-		filename = COM_SkipPath(Cmd_Argv(1));
-		COM_ForceExtension(filename, ".cfg");
+		Q_strncpyz(namebuf, COM_SkipPath(Cmd_Argv(1)), sizeof(namebuf));
+		COM_ForceExtension(namebuf, ".cfg");
+		filename = namebuf;
 		call_count = 0;
 	}
 	else
@@ -748,14 +750,16 @@ void LoadConfig_f(void)
 {
 	FILE *f;
 	char *filename;
+	char namebuf[MAX_OSPATH];
 
 	if (Cmd_Argc() != 2)
 	{
 		Com_Printf("Usage: %s <filename>\n", Cmd_Argv(0));
 		return;
 	}
-	filename = COM_SkipPath(Cmd_Argv(1));
-	COM_ForceExtension(filename, ".cfg");
+	Q_strncpyz(namebuf, COM_SkipPath(Cmd_Argv(1)), sizeof(namebuf));
+	COM_ForceExtension(namebuf, ".cfg");
+	filename = namebuf;
 	if (!(f = fopen(va("%s/classicq/configs/%s", com_basedir, filename), "r")))
 	{
 		Com_Printf("Couldn't load config %s\n", filename);
