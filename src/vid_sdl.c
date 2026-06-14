@@ -218,7 +218,11 @@ static void pump_events(struct sdldisplay *d)
 			case SDL_KEYDOWN:
 			case SDL_KEYUP:
 			{
-				keynum_t k = sdl_keycode_to_quake(ev.key.keysym.sym);
+				keynum_t k;
+				if (ev.key.keysym.scancode == SDL_SCANCODE_GRAVE)
+					k = '`';
+				else
+					k = sdl_keycode_to_quake(ev.key.keysym.sym);
 				if (k)
 					push_key(d, k, ev.type == SDL_KEYDOWN);
 				break;
