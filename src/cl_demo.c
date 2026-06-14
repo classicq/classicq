@@ -756,7 +756,7 @@ static qboolean OnChange_demo_dir(cvar_t *var, char *string)
 	Util_Process_Filename(string);
 	if (!Util_Is_Valid_Filename(string))
 	{
-		Com_Printf(Util_Invalid_Filename_Msg(var->name));
+		Com_Printf("%s", Util_Invalid_Filename_Msg(var->name));
 		return true;
 	}
 	return false;
@@ -845,7 +845,7 @@ void CL_Record_f (void)
 
 		if (!Util_Is_Valid_Filename(Cmd_Argv(1)))
 		{
-			Com_Printf(Util_Invalid_Filename_Msg(Cmd_Argv(1)));
+			Com_Printf("%s", Util_Invalid_Filename_Msg(Cmd_Argv(1)));
 			return;
 		}
 
@@ -903,7 +903,7 @@ static qboolean CL_RecordDemo(char *dir, char *name, qboolean autorecord)
 
 	if (!Util_Is_Valid_Filename(name))
 	{
-		Com_Printf(Util_Invalid_Filename_Msg(name));
+		Com_Printf("%s", Util_Invalid_Filename_Msg(name));
 		return false;
 	}
 

@@ -171,7 +171,7 @@ static qboolean OnChange_movie_dir(cvar_t *var, char *string) {
 	}
 	Util_Process_Filename(string);
 	if (!(Util_Is_Valid_Filename(string))) {
-		Com_Printf(Util_Invalid_Filename_Msg("demo_capture_dir"));
+		Com_Printf("%s", Util_Invalid_Filename_Msg("demo_capture_dir"));
 		return true;
 	}
 	return false;

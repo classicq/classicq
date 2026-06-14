@@ -67,7 +67,7 @@ static qboolean OnChange_log_dir(cvar_t *var, char *string)
 	Util_Process_Filename(string);
 	if (!Util_Is_Valid_Filename(string))
 	{
-		Com_Printf(Util_Invalid_Filename_Msg(var->name));
+		Com_Printf("%s", Util_Invalid_Filename_Msg(var->name));
 
 		return true;
 	}
@@ -131,7 +131,7 @@ static void Log_log_f(void)
 			Util_Process_Filename(logfilename);
 			if (!Util_Is_Valid_Filename(logfilename))
 			{
-				Com_Printf(Util_Invalid_Filename_Msg("filename"));
+				Com_Printf("%s", Util_Invalid_Filename_Msg("filename"));
 
 				return;
 			}
