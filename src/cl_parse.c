@@ -1568,10 +1568,66 @@ static void FlushString (char *s, int level, qboolean team, int offset)
 	Stats_ParsePrint(s, level);
 }
 
+extern cvar_t qtv_chatprefix, qtv_gamechatprefix, qtv_skipchained;
+
+static char *SkipQTVLeadingProxies(char *s)
+{
+	char *last = NULL;
+
+	for ( ; s[0]; )
+	{
+		if (s[0] == '#' && s[1] >= '0' && s[1] <= '9')
+		{
+			s++;
+			while (s[0] >= '0' && s[0] <= '9')
+				s++;
+
+			if (s[0] == ':')
+			{
+				char *name;
+
+				s++;
+				name = s;
+
+				if (s[0] != ' ')
+				{
+					while (s[0] && s[0] != ':')
+						s++;
+
+					if (s[0] == ':')
+					{
+						last = name;
+
+						if (!qtv_skipchained.value)
+							break;
+
+						s++;
+						if (s[0] == ' ')
+							s++;
+
+						continue;
+					}
+					else
+						break;
+				}
+				else
+					break;
+			}
+			else
+				break;
+		}
+
+		break;
+	}
+
+	return last;
+}
+
 void CL_ParsePrint (void)
 {
 	qboolean suppress_talksound;
 	char *s, str[2048], *p, check_flood;
+	char qtvstr[2048];
 	int len, level, flags = 0, offset = 0;
 	extern cvar_t cl_chatsound;
 
@@ -1580,6 +1636,31 @@ void CL_ParsePrint (void)
 
 	level = MSG_ReadByte ();
 	s = MSG_ReadString ();
+
+	{
+		char *qtvtmp = SkipQTVLeadingProxies(s);
+
+		if (qtvtmp)
+		{
+			char name[1024] = {0}, *column;
+
+			column = strchr(qtvtmp, ':');
+			if (!column)
+				column = qtvtmp;
+			else
+				strlcpy(name, qtvtmp, bound(1, column - qtvtmp + 1, (int)sizeof(name)));
+
+			if (!strncmp(s, "#0:qtv_say_game:", sizeof("#0:qtv_say_game:") - 1))
+				snprintf(qtvstr, sizeof(qtvstr), "%s%s%s\n", TP_ParseFunChars(qtv_gamechatprefix.string, false), name, column);
+			else if (!strncmp(s, "#0:qtv_say_team_game:", sizeof("#0:qtv_say_team_game:") - 1))
+				snprintf(qtvstr, sizeof(qtvstr), "%s(%s)%s\n", TP_ParseFunChars(qtv_gamechatprefix.string, false), name, column);
+			else
+				snprintf(qtvstr, sizeof(qtvstr), "%s%s%s\n", TP_ParseFunChars(qtv_chatprefix.string, false), name, column);
+
+			s = qtvstr;
+		}
+	}
+
 	Lua_MessageFunctions(level, s);
 
 	if (level == PRINT_CHAT)

@@ -114,6 +114,9 @@ cvar_t	cl_filterdrawviewmodel = {"cl_filterdrawviewmodel", "0"};
 cvar_t	cl_oldPL = {"cl_oldPL", "0"};
 cvar_t	cl_demoPingInterval = {"cl_demoPingInterval", "5"};
 cvar_t	cl_chatsound = {"cl_chatsound", "1"};
+cvar_t	qtv_chatprefix = {"qtv_chatprefix", "$[QTV$] "};
+cvar_t	qtv_gamechatprefix = {"qtv_gamechatprefix", "$[QTV>game$] "};
+cvar_t	qtv_skipchained = {"qtv_skipchained", "1"};
 cvar_t	cl_confirmquit = {"cl_confirmquit", "0"};
 cvar_t	default_fov = {"default_fov", "0"};
 cvar_t	qizmo_dir = {"qizmo_dir", "qizmo"};
@@ -1851,6 +1854,9 @@ void CL_CvarInit(void)
 	Cvar_SetCurrentGroup(CVAR_GROUP_CHAT);
 	Cvar_Register(&cl_parseWhiteText);
 	Cvar_Register(&cl_chatsound);
+	Cvar_Register(&qtv_chatprefix);
+	Cvar_Register(&qtv_gamechatprefix);
+	Cvar_Register(&qtv_skipchained);
 
 	Cvar_Register(&cl_floodprot);
 	Cvar_Register(&cl_fp_messages );
