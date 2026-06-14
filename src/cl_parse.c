@@ -607,6 +607,9 @@ static void CL_ChunkedDownloadData(int chunknum)
 	if (chunknum - chunked_first_block >= FTEMAXBLOCKS)
 		return;
 
+	if ((long long)chunknum * FTECHUNKSIZE >= chunked_size)
+		return;
+
 	if (chunked_received[chunknum & (FTEMAXBLOCKS - 1)])
 		return;
 
