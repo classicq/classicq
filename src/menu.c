@@ -4204,6 +4204,7 @@ void M_Init()
 	{
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Customize controls", 0, M_Menu_Keys_f));
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Customize teamplay", 0, M_Menu_TeamComms_f));
+		Menu_AddItem(optionsmenu, MenuItemButton_Create("Go to console", 0, M_Options_GoToConsole));
 		Menu_AddItem(optionsmenu, MenuItemSpacer_Create());
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Reset to defaults", 0, M_Options_ResetToDefaults));
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Save configuration", 1, M_Options_SaveConfiguration));
