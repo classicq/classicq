@@ -1236,6 +1236,7 @@ static char *bindnames[][2] =
 	{ NULL,                  NULL },
 	{ "+use",                "use" },
 	{ "messagemode",         "say" },
+	{ "toggleconsole",       "console" },
 };
 
 #define	NUMCOMMANDS	(sizeof(bindnames)/sizeof(bindnames[0]))
