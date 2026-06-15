@@ -60,7 +60,7 @@ qboolean OnChange_gl_crosshairimage(cvar_t *, char *);
 cvar_t	gl_crosshairimage   = {"crosshairimage", "", 0, OnChange_gl_crosshairimage};
 
 qboolean OnChange_gl_consolefont (cvar_t *, char *);
-cvar_t	gl_consolefont		= {"gl_consolefont", "original", 0, OnChange_gl_consolefont};
+cvar_t	gl_consolefont		= {"gl_consolefont", "classicq", 0, OnChange_gl_consolefont};
 
 cvar_t	gl_crosshairalpha	= {"crosshairalpha", "1", 0, 0, PostChange_crosshairstuff};
 

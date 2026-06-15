@@ -46,7 +46,7 @@ static float speedscale, speedscale2;		// for top sky and bottom sky
 qboolean r_skyboxloaded;
 
 static qboolean OnChange_r_skyname(cvar_t *v, char *s);
-cvar_t r_skyname = { "r_skyname", "", 0, OnChange_r_skyname };
+cvar_t r_skyname = { "r_skyname", "purple_chaos", 0, OnChange_r_skyname };
 cvar_t gl_water_program = { "gl_water_program", "1" };
 
 static void BoundPoly(int numverts, float *verts, vec3_t mins, vec3_t maxs)

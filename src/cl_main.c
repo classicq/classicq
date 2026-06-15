@@ -93,7 +93,7 @@ cvar_t	cl_shownet = {"cl_shownet", "0"};	// can be 0, 1, or 2
 
 cvar_t	cl_sbar		= {"cl_sbar", "0", CVAR_ARCHIVE};
 cvar_t	cl_hudswap	= {"cl_hudswap", "0", CVAR_ARCHIVE};
-cvar_t	cl_maxfps	= {"cl_maxfps", "1000", CVAR_ARCHIVE};
+cvar_t	cl_maxfps	= {"cl_maxfps", "616", CVAR_ARCHIVE};
 
 cvar_t	cl_predictPlayers = {"cl_predictPlayers", "1"};
 cvar_t	cl_solidPlayers = {"cl_solidPlayers", "1"};
@@ -154,7 +154,7 @@ cvar_t r_drawflat_slopes= {"r_drawflat_slopes", "off", 0, r_drawflat_slopes_call
 
 // info mirrors
 cvar_t	password = {"password", "", CVAR_USERINFO};
-cvar_t	spectator = {"spectator", "", CVAR_USERINFO};
+cvar_t	spectator = {"spectator", "0", CVAR_USERINFO};
 cvar_t	name = {"name", "unnamed", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	team = {"team", "icq", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	topcolor = {"topcolor","1", CVAR_ARCHIVE|CVAR_USERINFO};
