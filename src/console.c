@@ -29,8 +29,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static qboolean con_parsecolors_callback(cvar_t *, char *);
 
-static cvar_t con_notifylines = { "con_notifylines", "4" };
-static cvar_t con_notifytime = { "con_notifytime", "3" };
+static cvar_t con_notifylines = { "con_notifylines", "9" };
+static cvar_t con_notifytime = { "con_notifytime", "120" };
 static cvar_t con_parsecolors = { "con_parsecolors", "1", 0, con_parsecolors_callback };
 
 static unsigned char *conbuf;

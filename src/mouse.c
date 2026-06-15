@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static qboolean mouse_cvar_callback(cvar_t *var, char *string);
 
-cvar_t sensitivity = { "sensitivity", "3", CVAR_ARCHIVE, mouse_cvar_callback };
+cvar_t sensitivity = { "sensitivity", "4", CVAR_ARCHIVE, mouse_cvar_callback };
 cvar_t m_pitch = { "m_pitch", "0.022", CVAR_ARCHIVE, mouse_cvar_callback };
 cvar_t m_yaw = { "m_yaw", "0.022", 0, mouse_cvar_callback };
 cvar_t m_accel = { "m_accel", "0", 0, mouse_cvar_callback };

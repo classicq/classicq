@@ -51,7 +51,7 @@ cvar_t	gl_max_size			= {"gl_max_size", "512", 0, OnChange_gl_max_size};
 static cvar_t	gl_picmip			= {"gl_picmip", "0"};
 cvar_t	gl_miptexLevel		= {"gl_miptexLevel", "0", 0, OnChange_gl_miptexLevel};
 static cvar_t	gl_lerpimages		= {"gl_lerpimages", "1"};
-static cvar_t	gl_texturemode		= {"gl_texturemode", "GL_LINEAR_MIPMAP_NEAREST", 0, OnChange_gl_texturemode};
+static cvar_t	gl_texturemode		= {"gl_texturemode", "gl_nearest", 0, OnChange_gl_texturemode};
 
 cvar_t	gl_scaleModelTextures		= {"gl_scaleModelTextures", "0"};
 cvar_t	gl_scaleTurbTextures		= {"gl_scaleTurbTextures", "1"};

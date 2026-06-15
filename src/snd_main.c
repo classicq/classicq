@@ -66,7 +66,7 @@ static int soundtime_bufferwraps, soundtime_oldsamplepos;
 static int sound_started = 0;
 
 cvar_t bgmvolume = {"bgmvolume", "1", CVAR_ARCHIVE};
-cvar_t s_volume = {"volume", "0.5", CVAR_ARCHIVE};
+cvar_t s_volume = {"volume", "0.2", CVAR_ARCHIVE};
 cvar_t s_nosound = {"s_nosound", "0"};
 cvar_t s_precache = {"s_precache", "1"};
 cvar_t s_loadas8bit = {"s_loadas8bit", "0"};

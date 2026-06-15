@@ -49,7 +49,7 @@ static char tempqwd_name[256] = {0}; // this file must be deleted after playback
 #endif
 
 static qboolean OnChange_demo_dir(cvar_t *var, char *string);
-cvar_t demo_dir = {"demo_dir", "", 0, OnChange_demo_dir};
+cvar_t demo_dir = {"demo_dir", "qw/demos", 0, OnChange_demo_dir};
 
 //=============================================================================
 //								DEMO WRITING
