@@ -3,11 +3,9 @@ changelog:
     - title: New features
       labels:
         - enhancement
-        - feature
     - title: Bug fixes
       labels:
         - bug
-        - fix
     - title: Protocol & compatibility
       labels:
         - protocol
@@ -18,7 +16,6 @@ changelog:
         - ci
     - title: Documentation
       labels:
-        - docs
         - documentation
     - title: Other changes
       labels:
