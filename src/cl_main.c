@@ -155,10 +155,10 @@ cvar_t r_drawflat_slopes= {"r_drawflat_slopes", "off", 0, r_drawflat_slopes_call
 // info mirrors
 cvar_t	password = {"password", "", CVAR_USERINFO};
 cvar_t	spectator = {"spectator", "", CVAR_USERINFO};
-cvar_t	name = {"name", "player", CVAR_ARCHIVE|CVAR_USERINFO};
-cvar_t	team = {"team", "", CVAR_ARCHIVE|CVAR_USERINFO};
-cvar_t	topcolor = {"topcolor","0", CVAR_ARCHIVE|CVAR_USERINFO};
-cvar_t	bottomcolor = {"bottomcolor","0", CVAR_ARCHIVE|CVAR_USERINFO};
+cvar_t	name = {"name", "unnamed", CVAR_ARCHIVE|CVAR_USERINFO};
+cvar_t	team = {"team", "icq", CVAR_ARCHIVE|CVAR_USERINFO};
+cvar_t	topcolor = {"topcolor","1", CVAR_ARCHIVE|CVAR_USERINFO};
+cvar_t	bottomcolor = {"bottomcolor","6", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	skin = {"skin", "", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	rate = {"rate", "50000", CVAR_ARCHIVE|CVAR_USERINFO};
 cvar_t	msg = {"msg", "1", CVAR_ARCHIVE|CVAR_USERINFO};
