@@ -77,7 +77,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          BUILD_ARGS="-Drelease=true"
+          BUILD_ARGS="-Drelease=true -Dcpu=baseline"
           if [ "${{ matrix.platform }}" = "windows-amd64" ]; then
             BUILD_ARGS="-Dtarget=${{ matrix.target }} $BUILD_ARGS"
           fi
