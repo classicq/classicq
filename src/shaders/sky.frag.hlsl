@@ -15,5 +15,5 @@ float4 main(Input input) : SV_Target
 {
     float3 solid = solid_tex.Sample(solid_smp, input.st).rgb;
     float4 alpha = alpha_tex.Sample(alpha_smp, input.lm);
-    return float4(lerp(solid, alpha.rgb, alpha.a), 1.0);
+    return float4(lerp(solid, alpha.rgb, alpha.a), 1.0) * input.color;
 }

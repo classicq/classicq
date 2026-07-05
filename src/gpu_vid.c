@@ -47,6 +47,10 @@ static SDL_GPUBuffer *scene_ibuf;
 static SDL_GPUTransferBuffer *scene_itbuf;
 static unsigned int scene_indices[GPU_SCENE_MAX_INDICES];
 static unsigned int scene_numindices;
+static SDL_GPUBuffer *scene_dynvbuf;
+static SDL_GPUTransferBuffer *scene_dyntbuf;
+static scene_vert_t scene_dynverts[GPU_SCENE_MAX_DYNVERTS];
+static unsigned int scene_numdynverts;
 static scene_batch_t scene_batches[GPU_SCENE_MAX_BATCHES];
 static unsigned int scene_numbatches;
 static float scene_viewport[4];
@@ -332,10 +336,15 @@ static int create_pipelines(void)
 	SDL_ReleaseGPUShader(gpu_device, water_fs);
 
 	ok = pipe_ui && pipe_ui_alphatest && pipe_post;
+	if (!ok)
+		Com_Printf("GPU: ui/post pipeline creation failed\n");
 	for (i = 0; i < SCENE_PIPE_COUNT; i++)
 	{
 		if (!pipe_scene[i])
+		{
+			Com_Printf("GPU: scene pipeline %d creation failed\n", i);
 			ok = 0;
+		}
 	}
 
 	if (!ok)
@@ -474,7 +483,17 @@ int GPU_Init(SDL_Window *window, int vsync)
 	tci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
 	scene_itbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
 
-	if (!scene_ibuf || !scene_itbuf)
+	memset(&bci, 0, sizeof(bci));
+	bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+	bci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
+	scene_dynvbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+	memset(&tci, 0, sizeof(tci));
+	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	tci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
+	scene_dyntbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+	if (!scene_ibuf || !scene_itbuf || !scene_dynvbuf || !scene_dyntbuf)
 	{
 		Com_Printf("GPU: scene buffer creation failed: %s\n", SDL_GetError());
 		GPU_Shutdown();
@@ -541,6 +560,12 @@ void GPU_Shutdown(void)
 		SDL_ReleaseGPUTransferBuffer(gpu_device, scene_itbuf);
 	scene_ibuf = NULL;
 	scene_itbuf = NULL;
+	if (scene_dynvbuf)
+		SDL_ReleaseGPUBuffer(gpu_device, scene_dynvbuf);
+	if (scene_dyntbuf)
+		SDL_ReleaseGPUTransferBuffer(gpu_device, scene_dyntbuf);
+	scene_dynvbuf = NULL;
+	scene_dyntbuf = NULL;
 	scene_uploader = NULL;
 
 	if (samp_nearest)
@@ -717,6 +742,7 @@ void Scene_FrameReset(void)
 {
 	scene_numindices = 0;
 	scene_numbatches = 0;
+	scene_numdynverts = 0;
 	scene_has_viewport = 0;
 	autoid_valid = 0;
 }
@@ -728,6 +754,20 @@ unsigned int *Scene_AllocIndices(unsigned int count, unsigned int *firstindex)
 	*firstindex = scene_numindices;
 	scene_numindices += count;
 	return &scene_indices[*firstindex];
+}
+
+scene_vert_t *Scene_AllocVerts(unsigned int count, unsigned int *firstvert)
+{
+	if (scene_numdynverts + count > GPU_SCENE_MAX_DYNVERTS)
+		return NULL;
+	*firstvert = scene_numdynverts;
+	scene_numdynverts += count;
+	return &scene_dynverts[*firstvert];
+}
+
+SDL_GPUBuffer *GPU_GetDynamicSceneVB(void)
+{
+	return scene_dynvbuf;
 }
 
 scene_batch_t *Scene_AddBatch(int pipe, int texnum, SDL_GPUTexture *tex2, SDL_GPUBuffer *vbuf,
@@ -812,6 +852,16 @@ static void record_scene_pass(void)
 			}
 		}
 
+		if (scene_numdynverts)
+		{
+			mapped = SDL_MapGPUTransferBuffer(gpu_device, scene_dyntbuf, true);
+			if (mapped)
+			{
+				memcpy(mapped, scene_dynverts, scene_numdynverts * sizeof(scene_vert_t));
+				SDL_UnmapGPUTransferBuffer(gpu_device, scene_dyntbuf);
+			}
+		}
+
 		copy = SDL_BeginGPUCopyPass(frame_cmdbuf);
 
 		if (numverts)
@@ -831,6 +881,16 @@ static void record_scene_pass(void)
 			memset(&dst, 0, sizeof(dst));
 			dst.buffer = scene_ibuf;
 			dst.size = scene_numindices * sizeof(unsigned int);
+			SDL_UploadToGPUBuffer(copy, &src, &dst, true);
+		}
+
+		if (scene_numdynverts)
+		{
+			memset(&src, 0, sizeof(src));
+			src.transfer_buffer = scene_dyntbuf;
+			memset(&dst, 0, sizeof(dst));
+			dst.buffer = scene_dynvbuf;
+			dst.size = scene_numdynverts * sizeof(scene_vert_t);
 			SDL_UploadToGPUBuffer(copy, &src, &dst, true);
 		}
 

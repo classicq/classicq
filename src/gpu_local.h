@@ -102,8 +102,13 @@ void GPU_ReleaseBuffer(SDL_GPUBuffer *buf);
 SDL_GPUTexture *GPU_CreateDynamicTexture(unsigned int width, unsigned int height);
 void GPU_ReleaseTexture(SDL_GPUTexture *tex);
 
+#define GPU_SCENE_MAX_DYNVERTS 65536
+
 void Scene_FrameReset(void);
 unsigned int *Scene_AllocIndices(unsigned int count, unsigned int *firstindex);
+// per-frame streamed vertices (skybox, sprites); batches use GPU_GetDynamicSceneVB()
+scene_vert_t *Scene_AllocVerts(unsigned int count, unsigned int *firstvert);
+SDL_GPUBuffer *GPU_GetDynamicSceneVB(void);
 scene_batch_t *Scene_AddBatch(int pipe, int texnum, SDL_GPUTexture *tex2, SDL_GPUBuffer *vbuf,
 	unsigned int firstindex, unsigned int numindices, const float *mvp);
 void Scene_SetViewport(float x, float y, float w, float h);
