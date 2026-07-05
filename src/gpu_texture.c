@@ -21,7 +21,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <string.h>
 
 #include "quakedef.h"
+#include "gl_local.h"
+#include "image.h"
+#include "crc.h"
 #include "gpu_local.h"
+
+extern unsigned d_8to24table2[256];
+extern float vid_gamma;
+extern byte vid_gamma_table[256];
 
 #define MAX_GPUTEXTURES 4096
 
@@ -36,7 +43,24 @@ struct texentry
 static struct texentry textable[MAX_GPUTEXTURES];
 static int white_texnum;
 
-extern int texture_extension_number;
+// identifier cache, semantics from gl_texture.c
+typedef struct gltexture_s
+{
+	int texnum;
+	char identifier[64];
+	int width, height;
+	int scaled_width, scaled_height;
+	int texmode;
+	unsigned int crc;
+	int bpp;
+} gltexture_t;
+
+static gltexture_t gltextures[MAX_GLTEXTURES];
+static int numgltextures;
+
+cvar_t gl_picmip = {"gl_picmip", "0"};
+cvar_t gl_lerpimages = {"gl_lerpimages", "1"};
+cvar_t gl_texturemode = {"gl_texturemode", "gl_nearest"};
 
 static unsigned int mip_levels(unsigned int w, unsigned int h)
 {
@@ -163,6 +187,12 @@ void GPU_Texture_Set(int texnum, SDL_GPUTexture *tex, unsigned int width, unsign
 	textable[texnum].prefs = prefs;
 }
 
+void GPU_Texture_SetPrefs(int texnum, int prefs)
+{
+	if (texnum >= 0 && texnum < MAX_GPUTEXTURES)
+		textable[texnum].prefs = prefs;
+}
+
 SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs)
 {
 	if (texnum < 0 || texnum >= MAX_GPUTEXTURES || !textable[texnum].tex)
@@ -184,7 +214,8 @@ void GPU_Texture_InitTable(void)
 
 	memset(textable, 0, sizeof(textable));
 
-	white_texnum = texture_extension_number++;
+	if (!white_texnum)
+		white_texnum = texture_extension_number++;
 	tex = GPU_CreateTextureRGBA(white, 1, 1, 0);
 	GPU_Texture_Set(white_texnum, tex, 1, 1, 0);
 }
@@ -200,4 +231,330 @@ void GPU_Texture_ShutdownTable(void)
 			SDL_ReleaseGPUTexture(device, textable[i].tex);
 		textable[i].tex = NULL;
 	}
+}
+
+// ---- engine-facing texture API (gl_texture.c semantics) ----
+
+void GL_Bind(int texnum)
+{
+	currenttexture = texnum;
+}
+
+void GL_SelectTexture(GLenum target) { (void)target; }
+void GL_DisableMultitexture(void) {}
+void GL_EnableMultitexture(void) {}
+void GL_EnableTMU(GLenum target) { (void)target; }
+void GL_DisableTMU(GLenum target) { (void)target; }
+
+static void scale_dimensions(int width, int height, int *scaled_width, int *scaled_height, int mode)
+{
+	int w = width, h = height;
+
+	// NPOT is native now, only picmip and the size cap remain
+	if ((mode & TEX_MIPMAP) && !(mode & TEX_NOSCALE))
+	{
+		int shift = (int)bound(0, gl_picmip.value, 16);
+		w >>= shift;
+		h >>= shift;
+		if (w > gl_max_size.value) w = gl_max_size.value;
+		if (h > gl_max_size.value) h = gl_max_size.value;
+	}
+	else
+	{
+		if (w > gl_max_size_default) w = gl_max_size_default;
+		if (h > gl_max_size_default) h = gl_max_size_default;
+	}
+
+	*scaled_width = max(1, w);
+	*scaled_height = max(1, h);
+}
+
+static int prefs_for_mode(int mode)
+{
+	int linear;
+
+	if (mode & TEX_MIPMAP)
+		linear = Q_strcasecmp(gl_texturemode.string, "gl_nearest") != 0
+			&& Q_strncasecmp(gl_texturemode.string, "gl_nearest_", 11) != 0;
+	else
+		linear = gl_filter_max != 0x2600;	// GL_NEAREST
+
+	return linear ? GPU_TEXPREF_LINEAR : 0;
+}
+
+void GL_Upload32(unsigned *data, int width, int height, int mode)
+{
+	int scaled_width, scaled_height;
+	unsigned char *scaled = NULL;
+	const unsigned char *pixels = (const unsigned char *)data;
+	SDL_GPUTexture *tex;
+
+	scale_dimensions(width, height, &scaled_width, &scaled_height, mode);
+
+	if (scaled_width != width || scaled_height != height)
+	{
+		scaled = malloc(scaled_width * scaled_height * 4);
+		if (!scaled)
+			return;
+		Image_Resample(data, width, height, scaled, scaled_width, scaled_height, 4, gl_lerpimages.value != 0);
+		pixels = scaled;
+	}
+
+	tex = GPU_CreateTextureRGBA(pixels, scaled_width, scaled_height, (mode & TEX_MIPMAP) != 0);
+	GPU_Texture_Set(currenttexture, tex, scaled_width, scaled_height, prefs_for_mode(mode));
+
+	free(scaled);
+}
+
+void GL_Upload8(byte *data, int width, int height, int mode)
+{
+	unsigned int *buf;
+	unsigned int *table;
+	int i, size, has_alpha = 0;
+
+	size = width * height;
+	buf = malloc(size * 4);
+	if (!buf)
+		return;
+
+	table = (mode & TEX_BRIGHTEN) ? d_8to24table2 : d_8to24table;
+
+	if (mode & TEX_FULLBRIGHT)
+	{
+		mode |= TEX_ALPHA;
+		for (i = 0; i < size; i++)
+		{
+			if (data[i] < 224)
+				buf[i] = table[data[i]] & COLOURMASK_RGBA;	// zero alpha
+			else
+				buf[i] = table[data[i]];
+		}
+	}
+	else
+	{
+		for (i = 0; i < size; i++)
+		{
+			buf[i] = table[data[i]];
+			if (data[i] == 255)
+				has_alpha = 1;
+		}
+		if ((mode & TEX_ALPHA) && !has_alpha)
+			mode &= ~TEX_ALPHA;
+	}
+
+	GL_Upload32(buf, width, height, mode);
+	free(buf);
+}
+
+static gltexture_t *find_texture(const char *identifier)
+{
+	int i;
+
+	for (i = 0; i < numgltextures; i++)
+	{
+		if (!strncmp(identifier, gltextures[i].identifier, sizeof(gltextures[i].identifier) - 1))
+			return &gltextures[i];
+	}
+	return NULL;
+}
+
+int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode, int bpp)
+{
+	gltexture_t *glt = NULL;
+	int scaled_width, scaled_height;
+	unsigned int crc = 0;
+
+	scale_dimensions(width, height, &scaled_width, &scaled_height, mode);
+
+	if (identifier && identifier[0])
+	{
+		crc = CRC_Block(data, width * height * bpp);
+		glt = find_texture(identifier);
+		if (glt)
+		{
+			if (glt->width == width && glt->height == height
+				&& glt->scaled_width == scaled_width && glt->scaled_height == scaled_height
+				&& glt->crc == crc && glt->bpp == bpp
+				&& (glt->texmode & ~(TEX_COMPLAIN | TEX_NOSCALE)) == (mode & ~(TEX_COMPLAIN | TEX_NOSCALE)))
+			{
+				GL_Bind(glt->texnum);
+				return glt->texnum;
+			}
+			// same name, different content: re-upload into the same slot
+		}
+	}
+
+	if (!glt)
+	{
+		if (numgltextures >= MAX_GLTEXTURES)
+			Sys_Error("GL_LoadTexture: cache full");
+		glt = &gltextures[numgltextures++];
+		memset(glt, 0, sizeof(*glt));
+		if (identifier)
+			Q_strncpyz(glt->identifier, identifier, sizeof(glt->identifier));
+		glt->texnum = texture_extension_number++;
+	}
+
+	glt->width = width;
+	glt->height = height;
+	glt->scaled_width = scaled_width;
+	glt->scaled_height = scaled_height;
+	glt->texmode = mode;
+	glt->crc = crc;
+	glt->bpp = bpp;
+
+	GL_Bind(glt->texnum);
+	if (bpp == 1)
+		GL_Upload8(data, width, height, mode);
+	else if (bpp == 4)
+		GL_Upload32((unsigned *)data, width, height, mode);
+	else
+		Sys_Error("GL_LoadTexture: unsupported bpp %d", bpp);
+
+	return glt->texnum;
+}
+
+byte *GL_LoadImagePixels(char *filename, int matchwidth, int matchheight, unsigned int *imagewidth, unsigned int *imageheight, int mode)
+{
+	char basename[MAX_QPATH], name[MAX_QPATH];
+	byte *pixels;
+	char *c;
+
+	COM_CopyAndStripExtension(filename, basename, sizeof(basename));
+	for (c = basename; *c; c++)
+	{
+		if (*c == '*')
+			*c = '#';
+	}
+
+	snprintf(name, sizeof(name), "%s.tga", basename);
+	pixels = Image_LoadTGA(NULL, name, matchwidth, matchheight, imagewidth, imageheight);
+	if (pixels)
+		return pixels;
+
+#if USE_PNG
+	snprintf(name, sizeof(name), "%s.png", basename);
+	pixels = Image_LoadPNG(NULL, name, matchwidth, matchheight, imagewidth, imageheight);
+	if (pixels)
+		return pixels;
+#endif
+
+	if (mode & TEX_COMPLAIN)
+		Com_Printf("Couldn't load %s image\n", COM_SkipPath(filename));
+
+	return NULL;
+}
+
+int GL_LoadTexturePixels(byte *data, char *identifier, int width, int height, int mode)
+{
+	int i, j, image_size;
+
+	image_size = width * height;
+
+	if (!(mode & TEX_LUMA) && vid_gamma != 1)
+	{
+		for (i = 0; i < image_size; i++)
+		{
+			data[4 * i + 0] = vid_gamma_table[data[4 * i + 0]];
+			data[4 * i + 1] = vid_gamma_table[data[4 * i + 1]];
+			data[4 * i + 2] = vid_gamma_table[data[4 * i + 2]];
+		}
+	}
+
+	if (mode & TEX_ALPHA)
+	{
+		mode &= ~TEX_ALPHA;
+		for (j = 0; j < image_size; j++)
+		{
+			if (data[4 * j + 3] < 255)
+			{
+				mode |= TEX_ALPHA;
+				break;
+			}
+		}
+	}
+
+	return GL_LoadTexture(identifier, width, height, data, mode, 4);
+}
+
+int GL_LoadTextureImage(char *filename, char *identifier, int matchwidth, int matchheight, int mode)
+{
+	byte *pixels;
+	unsigned int w, h;
+	int texnum;
+
+	if (!identifier)
+		identifier = filename;
+
+	pixels = GL_LoadImagePixels(filename, matchwidth, matchheight, &w, &h, mode);
+	if (!pixels)
+		return 0;
+
+	texnum = GL_LoadTexturePixels(pixels, identifier, w, h, mode);
+	free(pixels);
+	return texnum;
+}
+
+int GL_LoadCharsetImage(char *filename, char *identifier)
+{
+	byte *pixels, *buf, *src, *dest;
+	unsigned int w, h;
+	int i, image_size, texnum;
+
+	pixels = GL_LoadImagePixels(filename, 0, 0, &w, &h, 0);
+	if (!pixels)
+		return 0;
+
+	if (w >= 32768 || h >= 32768 || w * h >= (1u << 28))
+	{
+		free(pixels);
+		return 0;
+	}
+
+	if (!identifier)
+		identifier = filename;
+
+	image_size = w * h;
+
+	// blank rows between character rows keep LINEAR from bleeding
+	buf = calloc(image_size * 2, 4);
+	if (!buf)
+	{
+		free(pixels);
+		return 0;
+	}
+
+	src = pixels;
+	dest = buf;
+	for (i = 0; i < 16; i++)
+	{
+		memcpy(dest, src, image_size >> 2);
+		src += image_size >> 2;
+		dest += image_size >> 1;
+	}
+
+	texnum = GL_LoadTexture(identifier, w, h * 2, buf, TEX_ALPHA | TEX_NOCOMPRESS, 4);
+
+	free(buf);
+	free(pixels);
+	return texnum;
+}
+
+void GL_Texture_CvarInit(void)
+{
+	Cvar_SetCurrentGroup(CVAR_GROUP_TEXTURES);
+	Cvar_Register(&gl_picmip);
+	Cvar_Register(&gl_lerpimages);
+	Cvar_Register(&gl_texturemode);
+	Cvar_ResetCurrentGroup();
+}
+
+void GL_Texture_Init(void)
+{
+	numgltextures = 0;
+}
+
+void GL_Texture_Shutdown(void)
+{
+	numgltextures = 0;
 }

@@ -444,14 +444,6 @@ void GPU_BeginFrame(unsigned int width, unsigned int height)
 	}
 
 	Draw2D_FrameReset();
-
-	// TEMP M2 self-test quad, remove once real 2D lands
-	if (COM_CheckParm("-autoshot"))
-	{
-		static const unsigned char red[4] = {255, 40, 40, 255};
-		Draw2D_Quad(GPU_Texture_White(), 0, 40.0f, 40.0f, 200.0f, 120.0f,
-			0.0f, 0.0f, 1.0f, 1.0f, red);
-	}
 }
 
 void GPU_SetPostParams(float gamma, float contrast, const float blend[4])

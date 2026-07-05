@@ -245,11 +245,16 @@ void R_CvarInit(void)
 
 int R_Init(void)
 {
+	GL_Texture_Init();
 	return 1;
 }
 
 void R_InitGL(void) {}
-void R_Shutdown(void) {}
+
+void R_Shutdown(void)
+{
+	GL_Texture_Shutdown();
+}
 void R_PreMapLoad(void) {}
 void R_NewMap(void) {}
 void R_InitEfrags(void) {}
@@ -264,7 +269,6 @@ void GL_Set2D(void) {}
 void R_PolyBlend(void) {}
 void R_BrightenScreen(void) {}
 void R_NetGraph(void) {}
-void Draw_SizeChanged(void) {}
 
 qboolean R_CullBox(vec3_t mins, vec3_t maxs)
 {
@@ -347,169 +351,12 @@ void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, co
 	GPU_SetPostParams(gamma, contrast, blend);
 }
 
-// ---- 2D ----
-
-struct Picture
-{
-	unsigned int width;
-	unsigned int height;
-};
-
-void DrawImp_CvarInit(void) {}
-void DrawImp_Init(void) {}
-void DrawImp_Shutdown(void) {}
-
-void DrawImp_Character(int x, int y, unsigned char num)
-{
-	(void)x; (void)y; (void)num;
-}
-
-void DrawImp_SetTextColor(int r, int g, int b)
-{
-	(void)r; (void)g; (void)b;
-}
-
-void Draw_BeginTextRendering(void) {}
-void Draw_EndTextRendering(void) {}
-void Draw_BeginColoredTextRendering(void) {}
-void Draw_EndColoredTextRendering(void) {}
-
-void Draw_Fill(int x, int y, int w, int h, int c)
-{
-	(void)x; (void)y; (void)w; (void)h; (void)c;
-}
-
-void Draw_AlphaFill(int x, int y, int w, int h, int c, float alpha)
-{
-	(void)x; (void)y; (void)w; (void)h; (void)c; (void)alpha;
-}
-
-void Draw_AlphaFillRGB(int x, int y, int w, int h, float r, float g, float b, float alpha)
-{
-	(void)x; (void)y; (void)w; (void)h; (void)r; (void)g; (void)b; (void)alpha;
-}
-
-void Draw_Line(int x1, int y1, int x2, int y2, float width, float r, float g, float b, float alpha)
-{
-	(void)x1; (void)y1; (void)x2; (void)y2; (void)width; (void)r; (void)g; (void)b; (void)alpha;
-}
-
-void Draw_FadeScreen(void) {}
-void Draw_Crosshair(void) {}
-void Draw_RecalcCrosshair(void) {}
+// ---- 2D leftovers (rest lives in gpu_draw2d.c) ----
 
 void Draw_SetSize(unsigned int width, unsigned int height)
 {
 	(void)width; (void)height;
 }
-
-struct Picture *Draw_LoadPicture(const char *name, enum Draw_LoadPicture_Fallback fallback)
-{
-	struct Picture *pic;
-
-	(void)name; (void)fallback;
-
-	pic = calloc(1, sizeof(*pic));
-	if (pic)
-	{
-		pic->width = 64;
-		pic->height = 64;
-	}
-	return pic;
-}
-
-struct Picture *Draw_BuildTranslatedMenuplyr(int top, int bottom)
-{
-	(void)top; (void)bottom;
-	return Draw_LoadPicture("", DRAW_LOADPICTURE_DUMMYFALLBACK);
-}
-
-void Draw_FreePicture(struct Picture *pic)
-{
-	free(pic);
-}
-
-unsigned int Draw_GetPictureWidth(struct Picture *pic)
-{
-	return pic ? pic->width : 0;
-}
-
-unsigned int Draw_GetPictureHeight(struct Picture *pic)
-{
-	return pic ? pic->height : 0;
-}
-
-void Draw_DrawPicture(struct Picture *pic, int x, int y, unsigned int width, unsigned int height)
-{
-	(void)pic; (void)x; (void)y; (void)width; (void)height;
-}
-
-void Draw_DrawPictureModulated(struct Picture *pic, int x, int y, unsigned int width, unsigned int height, float r, float g, float b, float alpha)
-{
-	(void)pic; (void)x; (void)y; (void)width; (void)height; (void)r; (void)g; (void)b; (void)alpha;
-}
-
-void Draw_DrawSubPicture(struct Picture *pic, float sx, float sy, float swidth, float sheight, int x, int y, unsigned int width, unsigned int height)
-{
-	(void)pic; (void)sx; (void)sy; (void)swidth; (void)sheight; (void)x; (void)y; (void)width; (void)height;
-}
-
-// ---- textures ----
-
-void GL_Bind(int texnum)
-{
-	currenttexture = texnum;
-}
-
-void GL_SelectTexture(GLenum target) { (void)target; }
-void GL_DisableMultitexture(void) {}
-void GL_EnableMultitexture(void) {}
-void GL_EnableTMU(GLenum target) { (void)target; }
-void GL_DisableTMU(GLenum target) { (void)target; }
-
-void GL_Upload8(byte *data, int width, int height, int mode)
-{
-	(void)data; (void)width; (void)height; (void)mode;
-}
-
-void GL_Upload32(unsigned *data, int width, int height, int mode)
-{
-	(void)data; (void)width; (void)height; (void)mode;
-}
-
-int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode, int bpp)
-{
-	(void)identifier; (void)width; (void)height; (void)data; (void)mode; (void)bpp;
-	return texture_extension_number++;
-}
-
-byte *GL_LoadImagePixels(char *filename, int matchwidth, int matchheight, unsigned int *imagewidth, unsigned int *imageheight, int mode)
-{
-	(void)filename; (void)matchwidth; (void)matchheight; (void)imagewidth; (void)imageheight; (void)mode;
-	return NULL;
-}
-
-int GL_LoadTexturePixels(byte *data, char *identifier, int width, int height, int mode)
-{
-	(void)data; (void)identifier; (void)width; (void)height; (void)mode;
-	return texture_extension_number++;
-}
-
-int GL_LoadTextureImage(char *filename, char *identifier, int matchwidth, int matchheight, int mode)
-{
-	(void)filename; (void)identifier; (void)matchwidth; (void)matchheight; (void)mode;
-	return texture_extension_number++;
-}
-
-int GL_LoadCharsetImage(char *filename, char *identifier)
-{
-	(void)filename; (void)identifier;
-	return texture_extension_number++;
-}
-
-void GL_Texture_CvarInit(void) {}
-void GL_Texture_Init(void) {}
-void GL_Texture_Shutdown(void) {}
 
 // ---- skins ----
 

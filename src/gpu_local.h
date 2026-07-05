@@ -52,6 +52,7 @@ void GPU_SetPostParams(float gamma, float contrast, const float blend[4]);
 void GPU_Texture_InitTable(void);
 void GPU_Texture_ShutdownTable(void);
 void GPU_Texture_Set(int texnum, SDL_GPUTexture *tex, unsigned int width, unsigned int height, int prefs);
+void GPU_Texture_SetPrefs(int texnum, int prefs);
 SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs);
 int GPU_Texture_White(void);
 SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int width, unsigned int height, int mipmap);
