@@ -45,6 +45,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gl_local.h"
 #include "gl_framebuffer.h"
 #include "gl_post_process.h"
+#include "gpu_local.h"
 #else
 #include "r_local.h"
 #endif
@@ -1058,9 +1059,8 @@ void SCR_SetupAutoID (void) {
 	if (!cls.demoplayback && !cl.spectator)
 		return;
 
-	glGetFloatv(GL_MODELVIEW_MATRIX, model);
-	glGetFloatv(GL_PROJECTION_MATRIX, project);
-	glGetIntegerv(GL_VIEWPORT, view);
+	if (!GPU_GetSceneMatrices(model, project, view))
+		return;
 
 	if (cl.spectator)
 		tracknum = Cam_TrackNum();
@@ -1578,7 +1578,6 @@ int SCR_Screenshot(char *name) {
 	int success = SSHOT_FAILED;
 	byte *buffer;
 	image_format_t format;
-	qboolean read_from_fbo;
 
 	name = (*name == '/') ? name + 1 : name;
 	format = SShot_FormatForName(name);
@@ -1586,17 +1585,9 @@ int SCR_Screenshot(char *name) {
 	buffersize = glwidth * glheight * 3;
 
 	buffer = Q_Malloc (buffersize);
-	glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
-	// read from FBO instead of post-swap back buffer
-	read_from_fbo = V_SoftGammaActive() && GL_FBO_GetID() != 0;
-	if (read_from_fbo)
-		qglBindFramebuffer(GL_READ_FRAMEBUFFER, GL_FBO_GetID());
-
-	glReadPixels (glx, gly, glwidth, glheight, GL_RGB, GL_UNSIGNED_BYTE, buffer);
-
-	if (read_from_fbo)
-		qglBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (!GPU_ReadPixels(buffer, glwidth, glheight))
+		memset(buffer, 0, buffersize);
 
 #if USE_PNG
 	if (format == IMAGE_PNG) {
@@ -1782,7 +1773,8 @@ void SCR_RSShot_f (void) {
 	base = Q_Malloc ((width * height + glwidth * glheight) * 3);
 	pixels = base + glwidth * glheight * 3;
 
-	glReadPixels (glx, gly, glwidth, glheight, GL_RGB, GL_UNSIGNED_BYTE, base);
+	if (!GPU_ReadPixels(base, glwidth, glheight))
+		memset(base, 0, glwidth * glheight * 3);
 	Image_Resample (base, glwidth, glheight, pixels, width, height, 3, 0);
 #if USE_JPEG
 	if (QLib_isModuleLoaded(qlib_libjpeg)) {
@@ -1854,10 +1846,6 @@ static void SCR_CheckAutoScreenshot(void) {
 
 	snprintf(savedname, sizeof(savedname), "%s_%03i%s", auto_matchname, num, ext);
 	fullsavedname = va("%s/%s", sshot_dir, savedname);
-
-#ifdef GLQUAKE
-	glFinish();
-#endif
 
 	if ((SCR_Screenshot(fullsavedname)) == SSHOT_SUCCESS)
 		Com_Printf("Match scoreboard saved to %s\n", savedname);

@@ -87,7 +87,6 @@ pub fn build(b: *std.Build) void {
                 .files = &win_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkSystemLibrary("opengl32", .{});
             root_mod.linkSystemLibrary("ws2_32", .{});
             root_mod.linkSystemLibrary("winmm", .{});
             root_mod.linkSystemLibrary("gdi32", .{});
@@ -106,7 +105,6 @@ pub fn build(b: *std.Build) void {
                 .files = &posix_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkSystemLibrary("GL", .{});
             root_mod.linkSystemLibrary("pthread", .{});
             root_mod.linkSystemLibrary("dl", .{});
             root_mod.linkSystemLibrary("m", .{});
@@ -117,7 +115,6 @@ pub fn build(b: *std.Build) void {
                 .files = &posix_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkFramework("OpenGL", .{});
             root_mod.linkSystemLibrary("pthread", .{});
             root_mod.linkSystemLibrary("m", .{});
         },
@@ -192,24 +189,11 @@ const common_sources = [_][]const u8{
     "cvar.c",
     "filesystem.c",
     "fmod.c",
-    "gl_draw.c",
-    "gl_framebuffer.c",
     "gl_mesh.c",
     "gl_model.c",
-    "gl_ngraph.c",
-    "gl_part.c",
-    "gl_post_process.c",
     "gl_refrag.c",
-    "gl_rlight.c",
-    "gl_rmain.c",
-    "gl_rmisc.c",
-    "gl_rpart.c",
-    "gl_rsurf.c",
-    "gl_shader.c",
-    "gl_skinimp.c",
-    "gl_state.c",
-    "gl_texture.c",
-    "gl_warp.c",
+    "gpu_stub.c",
+    "gpu_vid.c",
     "host.c",
     "huffman.c",
     "image.c",
@@ -251,7 +235,6 @@ const common_sources = [_][]const u8{
     "utils.c",
     "version.c",
     "vid.c",
-    "vid_common_gl.c",
     "vid_mode_null.c",
     "wad.c",
     "zone.c",

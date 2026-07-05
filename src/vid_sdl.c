@@ -28,7 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "keys.h"
 #include "sys_video.h"
 #include "image.h"
-#include "gl_local.h"
+#include "gpu_local.h"
 
 #define KEYQ_SIZE 256
 
@@ -37,7 +37,6 @@ static cvar_t vid_vsync = { "vid_vsync", "0", CVAR_ARCHIVE };
 struct sdldisplay
 {
 	SDL_Window *window;
-	SDL_GLContext gl_context;
 
 	unsigned int width;
 	unsigned int height;
@@ -58,60 +57,6 @@ struct sdldisplay
 
 	int focus_changed;
 };
-
-#ifdef _WIN32
-
-typedef void (APIENTRY *PFN_GLMULTITEXCOORD2F)(GLenum, GLfloat, GLfloat);
-typedef void (APIENTRY *PFN_GLDRAWRANGEELEMENTS)(GLenum, GLuint, GLuint, GLsizei, GLenum, const GLvoid *);
-typedef void (APIENTRY *PFN_GLCLIENTACTIVETEXTURE)(GLenum);
-typedef void (APIENTRY *PFN_GLACTIVETEXTURE)(GLenum);
-
-static PFN_GLMULTITEXCOORD2F     p_glMultiTexCoord2f;
-static PFN_GLDRAWRANGEELEMENTS   p_glDrawRangeElements;
-static PFN_GLCLIENTACTIVETEXTURE p_glClientActiveTexture;
-static PFN_GLACTIVETEXTURE       p_glActiveTexture;
-
-static void *resolve_gl(const char *primary, const char *fallback)
-{
-	void *p = (void *)SDL_GL_GetProcAddress(primary);
-	if (!p && fallback)
-		p = (void *)SDL_GL_GetProcAddress(fallback);
-	return p;
-}
-
-static void resolve_gl_thunks(void)
-{
-	p_glMultiTexCoord2f     = (PFN_GLMULTITEXCOORD2F)     resolve_gl("glMultiTexCoord2f",     "glMultiTexCoord2fARB");
-	p_glDrawRangeElements   = (PFN_GLDRAWRANGEELEMENTS)   resolve_gl("glDrawRangeElements",   "glDrawRangeElementsEXT");
-	p_glClientActiveTexture = (PFN_GLCLIENTACTIVETEXTURE) resolve_gl("glClientActiveTexture", "glClientActiveTextureARB");
-	p_glActiveTexture       = (PFN_GLACTIVETEXTURE)       resolve_gl("glActiveTexture",       "glActiveTextureARB");
-}
-
-void glMultiTexCoord2f(GLenum target, GLfloat s, GLfloat t)
-{
-	if (p_glMultiTexCoord2f)
-		p_glMultiTexCoord2f(target, s, t);
-}
-
-void glDrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices)
-{
-	if (p_glDrawRangeElements)
-		p_glDrawRangeElements(mode, start, end, count, type, indices);
-}
-
-void glClientActiveTexture(GLenum texture)
-{
-	if (p_glClientActiveTexture)
-		p_glClientActiveTexture(texture);
-}
-
-void glActiveTexture(GLenum texture)
-{
-	if (p_glActiveTexture)
-		p_glActiveTexture(texture);
-}
-
-#endif
 
 static keynum_t sdl_keycode_to_quake(SDL_Keycode sym)
 {
@@ -328,14 +273,7 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 		}
 	}
 
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-	SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
+	SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
 	if (fullscreen)
 		flags |= SDL_WINDOW_FULLSCREEN;
 	else
@@ -372,24 +310,12 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 	}
 #endif
 
-	d->gl_context = SDL_GL_CreateContext(d->window);
-	if (!d->gl_context)
+	if (!GPU_Init(d->window, (int)vid_vsync.value))
 	{
-		Com_Printf("SDL_GL_CreateContext failed: %s\n", SDL_GetError());
 		SDL_DestroyWindow(d->window);
 		free(d);
 		return NULL;
 	}
-
-	{
-		int interval = (int)vid_vsync.value;
-		if (!SDL_GL_SetSwapInterval(interval) && interval == -1)
-			SDL_GL_SetSwapInterval(1);
-	}
-
-#ifdef _WIN32
-	resolve_gl_thunks();
-#endif
 
 	int w = (int)width, h = (int)height;
 	SDL_GetWindowSizeInPixels(d->window, &w, &h);
@@ -430,8 +356,7 @@ void Sys_Video_Close(void *display)
 	if (!d)
 		return;
 
-	if (d->gl_context)
-		SDL_GL_DestroyContext(d->gl_context);
+	GPU_Shutdown();
 	if (d->window)
 		SDL_DestroyWindow(d->window);
 
@@ -446,10 +371,9 @@ unsigned int Sys_Video_GetNumBuffers(void *display)
 
 void Sys_Video_Update(void *display, vrect_t *rects)
 {
-	struct sdldisplay *d = display;
+	(void)display;
 	(void)rects;
-	if (d && d->window)
-		SDL_GL_SwapWindow(d->window);
+	GPU_EndFrame();
 }
 
 int Sys_Video_GetKeyEvent(void *display, keynum_t *keynum, qboolean *down)
@@ -547,8 +471,8 @@ int Sys_Video_FocusChanged(void *display)
 void Sys_Video_BeginFrame(void *display)
 {
 	struct sdldisplay *d = display;
-	if (d && d->window && d->gl_context)
-		SDL_GL_MakeCurrent(d->window, d->gl_context);
+	if (d && d->window)
+		GPU_BeginFrame(d->width, d->height);
 }
 
 void Sys_Video_SetGamma(void *display, unsigned short *ramps)
@@ -567,7 +491,8 @@ qboolean Sys_Video_HWGammaSupported(void *display)
 void *Sys_Video_GetProcAddress(void *display, const char *name)
 {
 	(void)display;
-	return (void *)SDL_GL_GetProcAddress(name);
+	(void)name;
+	return NULL;
 }
 
 const char *Sys_Video_GetClipboardText(void *display)
