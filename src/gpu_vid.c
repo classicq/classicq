@@ -23,19 +23,210 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "gpu_local.h"
 
+#include "shaders/shaders_gen.h"
+
+#define UI_MAX_VERTS GPU_UI_MAX_VERTS
+
 static SDL_GPUDevice *gpu_device;
 static SDL_Window *gpu_window;
 
 static SDL_GPUTexture *scene_color;
 static SDL_GPUTexture *scene_depth;
 static SDL_GPUTextureFormat scene_depth_format;
+static SDL_GPUTextureFormat swapchain_format;
 static unsigned int scene_width, scene_height;
 
 static SDL_GPUCommandBuffer *frame_cmdbuf;
-static int frame_scene_cleared;
+
+static SDL_GPUGraphicsPipeline *pipe_ui;
+static SDL_GPUGraphicsPipeline *pipe_ui_alphatest;
+static SDL_GPUGraphicsPipeline *pipe_post;
+
+static SDL_GPUSampler *samp_nearest;
+static SDL_GPUSampler *samp_linear;
+static SDL_GPUSampler *samp_nearest_clamp;
+static SDL_GPUSampler *samp_linear_clamp;
+
+static SDL_GPUBuffer *ui_vbuf;
+static SDL_GPUTransferBuffer *ui_tbuf;
 
 static SDL_GPUTransferBuffer *readback_buffer;
 static unsigned int readback_size;
+
+static float post_gamma = 1.0f;
+static float post_contrast = 1.0f;
+static float post_blend[4];
+
+#define SHADER_ARGS(n) n##_spv, sizeof(n##_spv), n##_dxil, sizeof(n##_dxil), n##_msl, sizeof(n##_msl)
+
+static SDL_GPUShader *load_shader(SDL_GPUShaderStage stage,
+	const unsigned char *spv, unsigned int spv_len,
+	const unsigned char *dxil, unsigned int dxil_len,
+	const unsigned char *msl, unsigned int msl_len,
+	Uint32 num_samplers, Uint32 num_uniform_buffers)
+{
+	SDL_GPUShaderCreateInfo ci;
+	SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(gpu_device);
+
+	memset(&ci, 0, sizeof(ci));
+	if (formats & SDL_GPU_SHADERFORMAT_SPIRV)
+	{
+		ci.format = SDL_GPU_SHADERFORMAT_SPIRV;
+		ci.code = spv;
+		ci.code_size = spv_len;
+		ci.entrypoint = "main";
+	}
+	else if (formats & SDL_GPU_SHADERFORMAT_DXIL)
+	{
+		ci.format = SDL_GPU_SHADERFORMAT_DXIL;
+		ci.code = dxil;
+		ci.code_size = dxil_len;
+		ci.entrypoint = "main";
+	}
+	else if (formats & SDL_GPU_SHADERFORMAT_MSL)
+	{
+		ci.format = SDL_GPU_SHADERFORMAT_MSL;
+		ci.code = msl;
+		ci.code_size = msl_len;
+		ci.entrypoint = "main0";
+	}
+	else
+	{
+		Com_Printf("GPU: no supported shader format\n");
+		return NULL;
+	}
+
+	ci.stage = stage;
+	ci.num_samplers = num_samplers;
+	ci.num_uniform_buffers = num_uniform_buffers;
+
+	return SDL_CreateGPUShader(gpu_device, &ci);
+}
+
+static SDL_GPUGraphicsPipeline *make_ui_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs)
+{
+	SDL_GPUGraphicsPipelineCreateInfo ci;
+	SDL_GPUVertexBufferDescription vbd;
+	SDL_GPUVertexAttribute attrs[3];
+	SDL_GPUColorTargetDescription ct;
+
+	memset(&ci, 0, sizeof(ci));
+	memset(&vbd, 0, sizeof(vbd));
+	memset(&attrs, 0, sizeof(attrs));
+	memset(&ct, 0, sizeof(ct));
+
+	vbd.slot = 0;
+	vbd.pitch = sizeof(ui_vert_t);
+	vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+	attrs[0].location = 0;
+	attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	attrs[0].offset = 0;
+	attrs[1].location = 1;
+	attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	attrs[1].offset = 8;
+	attrs[2].location = 2;
+	attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+	attrs[2].offset = 16;
+
+	ct.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	ct.blend_state.enable_blend = true;
+	ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+	ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+	ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+	ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+	ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+	ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+
+	ci.vertex_shader = vs;
+	ci.fragment_shader = fs;
+	ci.vertex_input_state.vertex_buffer_descriptions = &vbd;
+	ci.vertex_input_state.num_vertex_buffers = 1;
+	ci.vertex_input_state.vertex_attributes = attrs;
+	ci.vertex_input_state.num_vertex_attributes = 3;
+	ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+	ci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+	ci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+	ci.target_info.color_target_descriptions = &ct;
+	ci.target_info.num_color_targets = 1;
+	ci.target_info.depth_stencil_format = scene_depth_format;
+	ci.target_info.has_depth_stencil_target = true;
+
+	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
+}
+
+static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs)
+{
+	SDL_GPUGraphicsPipelineCreateInfo ci;
+	SDL_GPUColorTargetDescription ct;
+
+	memset(&ci, 0, sizeof(ci));
+	memset(&ct, 0, sizeof(ct));
+
+	ct.format = swapchain_format;
+
+	ci.vertex_shader = vs;
+	ci.fragment_shader = fs;
+	ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+	ci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+	ci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+	ci.target_info.color_target_descriptions = &ct;
+	ci.target_info.num_color_targets = 1;
+
+	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
+}
+
+static SDL_GPUSampler *make_sampler(SDL_GPUFilter filter, SDL_GPUSamplerAddressMode address)
+{
+	SDL_GPUSamplerCreateInfo ci;
+
+	memset(&ci, 0, sizeof(ci));
+	ci.min_filter = filter;
+	ci.mag_filter = filter;
+	ci.mipmap_mode = (filter == SDL_GPU_FILTER_LINEAR) ?
+		SDL_GPU_SAMPLERMIPMAPMODE_LINEAR : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+	ci.address_mode_u = address;
+	ci.address_mode_v = address;
+	ci.address_mode_w = address;
+	ci.max_lod = 1000.0f;
+
+	return SDL_CreateGPUSampler(gpu_device, &ci);
+}
+
+static int create_pipelines(void)
+{
+	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
+
+	ui_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(ui_vert), 0, 1);
+	ui_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(ui_frag), 1, 0);
+	ui_at_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(ui_alphatest_frag), 1, 0);
+	post_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(post_vert), 0, 0);
+	post_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(post_frag), 1, 1);
+
+	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs)
+	{
+		Com_Printf("GPU: shader creation failed: %s\n", SDL_GetError());
+		return 0;
+	}
+
+	pipe_ui = make_ui_pipeline(ui_vs, ui_fs);
+	pipe_ui_alphatest = make_ui_pipeline(ui_vs, ui_at_fs);
+	pipe_post = make_post_pipeline(post_vs, post_fs);
+
+	SDL_ReleaseGPUShader(gpu_device, ui_vs);
+	SDL_ReleaseGPUShader(gpu_device, ui_fs);
+	SDL_ReleaseGPUShader(gpu_device, ui_at_fs);
+	SDL_ReleaseGPUShader(gpu_device, post_vs);
+	SDL_ReleaseGPUShader(gpu_device, post_fs);
+
+	if (!pipe_ui || !pipe_ui_alphatest || !pipe_post)
+	{
+		Com_Printf("GPU: pipeline creation failed: %s\n", SDL_GetError());
+		return 0;
+	}
+
+	return 1;
+}
 
 static void destroy_scene_targets(void)
 {
@@ -109,6 +300,9 @@ void GPU_SetVsync(int vsync)
 
 int GPU_Init(SDL_Window *window, int vsync)
 {
+	SDL_GPUBufferCreateInfo bci;
+	SDL_GPUTransferBufferCreateInfo tci;
+
 	gpu_device = SDL_CreateGPUDevice(
 		SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
 		COM_CheckParm("-gpudebug") != 0,
@@ -128,6 +322,7 @@ int GPU_Init(SDL_Window *window, int vsync)
 	}
 
 	gpu_window = window;
+	swapchain_format = SDL_GetGPUSwapchainTextureFormat(gpu_device, gpu_window);
 
 	if (SDL_GPUTextureSupportsFormat(gpu_device, SDL_GPU_TEXTUREFORMAT_D24_UNORM,
 		SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
@@ -135,6 +330,35 @@ int GPU_Init(SDL_Window *window, int vsync)
 	else
 		scene_depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
+	samp_nearest = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+	samp_linear = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+	samp_nearest_clamp = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+	samp_linear_clamp = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+
+	memset(&bci, 0, sizeof(bci));
+	bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+	bci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
+	ui_vbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+	memset(&tci, 0, sizeof(tci));
+	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	tci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
+	ui_tbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+	if (!samp_nearest || !samp_linear || !samp_nearest_clamp || !samp_linear_clamp || !ui_vbuf || !ui_tbuf)
+	{
+		Com_Printf("GPU: resource creation failed: %s\n", SDL_GetError());
+		GPU_Shutdown();
+		return 0;
+	}
+
+	if (!create_pipelines())
+	{
+		GPU_Shutdown();
+		return 0;
+	}
+
+	GPU_Texture_InitTable();
 	GPU_SetVsync(vsync);
 
 	Com_Printf("GPU driver: %s\n", SDL_GetGPUDeviceDriver(gpu_device));
@@ -154,6 +378,33 @@ void GPU_Shutdown(void)
 	}
 
 	SDL_WaitForGPUIdle(gpu_device);
+
+	GPU_Texture_ShutdownTable();
+
+	if (pipe_ui)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_ui);
+	if (pipe_ui_alphatest)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_ui_alphatest);
+	if (pipe_post)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_post);
+	pipe_ui = pipe_ui_alphatest = pipe_post = NULL;
+
+	if (samp_nearest)
+		SDL_ReleaseGPUSampler(gpu_device, samp_nearest);
+	if (samp_linear)
+		SDL_ReleaseGPUSampler(gpu_device, samp_linear);
+	if (samp_nearest_clamp)
+		SDL_ReleaseGPUSampler(gpu_device, samp_nearest_clamp);
+	if (samp_linear_clamp)
+		SDL_ReleaseGPUSampler(gpu_device, samp_linear_clamp);
+	samp_nearest = samp_linear = samp_nearest_clamp = samp_linear_clamp = NULL;
+
+	if (ui_vbuf)
+		SDL_ReleaseGPUBuffer(gpu_device, ui_vbuf);
+	if (ui_tbuf)
+		SDL_ReleaseGPUTransferBuffer(gpu_device, ui_tbuf);
+	ui_vbuf = NULL;
+	ui_tbuf = NULL;
 
 	if (readback_buffer)
 	{
@@ -191,24 +442,72 @@ void GPU_BeginFrame(unsigned int width, unsigned int height)
 		Com_Printf("GPU: command buffer acquire failed: %s\n", SDL_GetError());
 		return;
 	}
-	frame_scene_cleared = 0;
+
+	Draw2D_FrameReset();
+
+	// TEMP M2 self-test quad, remove once real 2D lands
+	if (COM_CheckParm("-autoshot"))
+	{
+		static const unsigned char red[4] = {255, 40, 40, 255};
+		Draw2D_Quad(GPU_Texture_White(), 0, 40.0f, 40.0f, 200.0f, 120.0f,
+			0.0f, 0.0f, 1.0f, 1.0f, red);
+	}
 }
 
-// M1: scene pass only clears; draw modules will hook in here later
-static void ensure_scene_cleared(void)
+void GPU_SetPostParams(float gamma, float contrast, const float blend[4])
+{
+	post_gamma = gamma;
+	post_contrast = contrast;
+	if (blend)
+		memcpy(post_blend, blend, sizeof(post_blend));
+}
+
+static SDL_GPUSampler *sampler_for_prefs(int prefs)
+{
+	if (prefs & GPU_TEXPREF_LINEAR)
+		return (prefs & GPU_TEXPREF_CLAMP) ? samp_linear_clamp : samp_linear;
+	return (prefs & GPU_TEXPREF_CLAMP) ? samp_nearest_clamp : samp_nearest;
+}
+
+// scene render pass: clear + all recorded 2D batches
+static void record_scene_pass(void)
 {
 	SDL_GPUColorTargetInfo ct;
 	SDL_GPUDepthStencilTargetInfo ds;
 	SDL_GPURenderPass *pass;
+	const ui_vert_t *verts;
+	const ui_batch_t *batches;
+	unsigned int numverts, numbatches, i;
 
-	if (frame_scene_cleared || !frame_cmdbuf || !scene_color)
-		return;
+	verts = Draw2D_GetVerts(&numverts);
+	batches = Draw2D_GetBatches(&numbatches);
+
+	if (numverts)
+	{
+		SDL_GPUCopyPass *copy;
+		SDL_GPUTransferBufferLocation src;
+		SDL_GPUBufferRegion dst;
+		void *mapped;
+
+		mapped = SDL_MapGPUTransferBuffer(gpu_device, ui_tbuf, true);
+		if (mapped)
+		{
+			memcpy(mapped, verts, numverts * sizeof(ui_vert_t));
+			SDL_UnmapGPUTransferBuffer(gpu_device, ui_tbuf);
+		}
+
+		copy = SDL_BeginGPUCopyPass(frame_cmdbuf);
+		memset(&src, 0, sizeof(src));
+		src.transfer_buffer = ui_tbuf;
+		memset(&dst, 0, sizeof(dst));
+		dst.buffer = ui_vbuf;
+		dst.size = numverts * sizeof(ui_vert_t);
+		SDL_UploadToGPUBuffer(copy, &src, &dst, true);
+		SDL_EndGPUCopyPass(copy);
+	}
 
 	memset(&ct, 0, sizeof(ct));
 	ct.texture = scene_color;
-	ct.clear_color.r = 0.15f;
-	ct.clear_color.g = 0.15f;
-	ct.clear_color.b = 0.15f;
 	ct.clear_color.a = 1.0f;
 	ct.load_op = SDL_GPU_LOADOP_CLEAR;
 	ct.store_op = SDL_GPU_STOREOP_STORE;
@@ -224,10 +523,93 @@ static void ensure_scene_cleared(void)
 	ds.cycle = true;
 
 	pass = SDL_BeginGPURenderPass(frame_cmdbuf, &ct, 1, &ds);
-	if (pass)
-		SDL_EndGPURenderPass(pass);
+	if (!pass)
+		return;
 
-	frame_scene_cleared = 1;
+	if (numbatches)
+	{
+		SDL_GPUBufferBinding vb;
+
+		memset(&vb, 0, sizeof(vb));
+		vb.buffer = ui_vbuf;
+		SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+
+		for (i = 0; i < numbatches; i++)
+		{
+			const ui_batch_t *b = &batches[i];
+			SDL_GPUTextureSamplerBinding tsb;
+			SDL_GPUTexture *tex;
+			int prefs = 0;
+			float ortho[16];
+
+			tex = GPU_Texture_Lookup(b->texnum, &prefs);
+			if (!tex)
+				continue;
+
+			SDL_BindGPUGraphicsPipeline(pass, b->alphatest ? pipe_ui_alphatest : pipe_ui);
+
+			memset(ortho, 0, sizeof(ortho));
+			ortho[0] = 2.0f / b->ortho_w;
+			ortho[5] = -2.0f / b->ortho_h;
+			ortho[10] = 1.0f;
+			ortho[12] = -1.0f;
+			ortho[13] = 1.0f;
+			ortho[15] = 1.0f;
+			SDL_PushGPUVertexUniformData(frame_cmdbuf, 0, ortho, sizeof(ortho));
+
+			memset(&tsb, 0, sizeof(tsb));
+			tsb.texture = tex;
+			tsb.sampler = sampler_for_prefs(prefs);
+			SDL_BindGPUFragmentSamplers(pass, 0, &tsb, 1);
+
+			SDL_DrawGPUPrimitives(pass, b->numverts, 1, b->firstvert, 0);
+		}
+	}
+
+	SDL_EndGPURenderPass(pass);
+}
+
+static void record_post_pass(SDL_GPUTexture *swap_tex, Uint32 swap_w, Uint32 swap_h)
+{
+	SDL_GPUColorTargetInfo ct;
+	SDL_GPURenderPass *pass;
+	SDL_GPUTextureSamplerBinding tsb;
+	struct
+	{
+		float blend[4];
+		float gamma;
+		float contrast;
+		float pad[2];
+	} ubo;
+
+	memset(&ct, 0, sizeof(ct));
+	ct.texture = swap_tex;
+	ct.load_op = SDL_GPU_LOADOP_DONT_CARE;
+	ct.store_op = SDL_GPU_STOREOP_STORE;
+
+	pass = SDL_BeginGPURenderPass(frame_cmdbuf, &ct, 1, NULL);
+	if (!pass)
+		return;
+
+	(void)swap_w;
+	(void)swap_h;
+
+	SDL_BindGPUGraphicsPipeline(pass, pipe_post);
+
+	memcpy(ubo.blend, post_blend, sizeof(ubo.blend));
+	ubo.gamma = post_gamma;
+	ubo.contrast = post_contrast;
+	ubo.pad[0] = ubo.pad[1] = 0.0f;
+	SDL_PushGPUFragmentUniformData(frame_cmdbuf, 0, &ubo, sizeof(ubo));
+
+	memset(&tsb, 0, sizeof(tsb));
+	tsb.texture = scene_color;
+	tsb.sampler = samp_nearest_clamp;
+	SDL_BindGPUFragmentSamplers(pass, 0, &tsb, 1);
+
+	SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+
+	SDL_EndGPURenderPass(pass);
 }
 
 void GPU_EndFrame(void)
@@ -238,32 +620,18 @@ void GPU_EndFrame(void)
 	if (!gpu_device || !frame_cmdbuf)
 		return;
 
-	ensure_scene_cleared();
+	record_scene_pass();
 
 	if (!SDL_WaitAndAcquireGPUSwapchainTexture(frame_cmdbuf, gpu_window, &swap_tex, &swap_w, &swap_h))
 		swap_tex = NULL;
 
 	if (swap_tex)
-	{
-		SDL_GPUBlitInfo blit;
-
-		memset(&blit, 0, sizeof(blit));
-		blit.source.texture = scene_color;
-		blit.source.w = scene_width;
-		blit.source.h = scene_height;
-		blit.destination.texture = swap_tex;
-		blit.destination.w = swap_w;
-		blit.destination.h = swap_h;
-		blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-		blit.filter = SDL_GPU_FILTER_NEAREST;
-
-		SDL_BlitGPUTexture(frame_cmdbuf, &blit);
-	}
+		record_post_pass(swap_tex, swap_w, swap_h);
 
 	SDL_SubmitGPUCommandBuffer(frame_cmdbuf);
 	frame_cmdbuf = NULL;
 
-	// TEMP M1 test hook: -autoshot takes a screenshot at frame 60, quits at 70
+	// TEMP test hook: -autoshot takes a screenshot at frame 60, quits at 70
 	{
 		static int frames, enabled = -1;
 		if (enabled == -1)
@@ -344,11 +712,11 @@ int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height)
 		readback_size = needed;
 	}
 
-	// mid-frame: append download to the open frame cmdbuf and flush it
-	// (that frame skips presentation); between frames: own cmdbuf
+	// mid-frame: record pending 2D into the open cmdbuf so the shot matches
+	// what the engine drew this frame, then flush it (frame skips presentation)
 	if (frame_cmdbuf)
 	{
-		ensure_scene_cleared();
+		record_scene_pass();
 		cmdbuf = frame_cmdbuf;
 		frame_cmdbuf = NULL;
 	}

@@ -343,7 +343,8 @@ qboolean GL_PostProcess_IsReady(void)
 
 void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, const float blend[4])
 {
-	(void)color_tex; (void)gamma; (void)contrast; (void)blend;
+	(void)color_tex;
+	GPU_SetPostParams(gamma, contrast, blend);
 }
 
 // ---- 2D ----

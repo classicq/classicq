@@ -41,4 +41,48 @@ int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height);
 // column-major modelview/projection + viewport of the last 3D scene; 0 if none yet
 int GPU_GetSceneMatrices(float *modelview, float *projection, int *viewport);
 
+// post pass parameters, latched per frame by GL_PostProcess_Draw
+void GPU_SetPostParams(float gamma, float contrast, const float blend[4]);
+
+// ---- textures (gpu_texture.c) ----
+
+#define GPU_TEXPREF_LINEAR 1
+#define GPU_TEXPREF_CLAMP  2
+
+void GPU_Texture_InitTable(void);
+void GPU_Texture_ShutdownTable(void);
+void GPU_Texture_Set(int texnum, SDL_GPUTexture *tex, unsigned int width, unsigned int height, int prefs);
+SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs);
+int GPU_Texture_White(void);
+SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int width, unsigned int height, int mipmap);
+
+// ---- 2D batcher (gpu_draw2d.c) ----
+
+#define GPU_UI_MAX_VERTS 65536
+
+typedef struct ui_batch_s
+{
+	int texnum;
+	int alphatest;
+	unsigned int firstvert;
+	unsigned int numverts;
+	float ortho_w;
+	float ortho_h;
+} ui_batch_t;
+
+typedef struct ui_vert_s
+{
+	float x, y;
+	float u, v;
+	unsigned char rgba[4];
+} ui_vert_t;
+
+void Draw2D_FrameReset(void);
+void Draw2D_Quad(int texnum, int alphatest,
+	float x0, float y0, float x1, float y1,
+	float s0, float t0, float s1, float t1,
+	const unsigned char rgba[4]);
+const ui_vert_t *Draw2D_GetVerts(unsigned int *numverts);
+const ui_batch_t *Draw2D_GetBatches(unsigned int *numbatches);
+
 #endif
