@@ -20,12 +20,12 @@ With those in hand, grab the classicQ binary from [the releases page](https://gi
 
 Binary lands in `assets/` next to the configs. Run from there.
 
-Oh, and on Linux you also need SDL2's dev package first. Try this:
+SDL3 is built from source as part of the build. On Linux you still need OpenGL dev headers:
 
-- Ubuntu: `sudo apt install libsdl2-dev`
-- Fedora: `sudo dnf install SDL2-devel`
-- Arch: `sudo pacman -S sdl2`
-- openSUSE: `sudo zypper install libSDL2-devel`
+- Ubuntu: `sudo apt install libgl1-mesa-dev`
+- Fedora: `sudo dnf install mesa-libGL-devel`
+- Arch: `sudo pacman -S mesa`
+- openSUSE: `sudo zypper install Mesa-libGL-devel`
 
 ## Credits
 

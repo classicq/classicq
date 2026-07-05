@@ -19,18 +19,11 @@ pub fn build(b: *std.Build) void {
         .root_module = root_mod,
     });
 
-    // SDL: system on Linux, source on Windows/macOS.
-    if (target.result.os.tag == .linux) {
-        root_mod.linkSystemLibrary("SDL2", .{});
-    } else {
-        const sdl_dep = b.dependency("SDL", .{
-            .target = target,
-            .optimize = optimize,
-        });
-        root_mod.linkLibrary(sdl_dep.artifact("SDL2"));
-        root_mod.addIncludePath(sdl_dep.path("include"));
-        root_mod.addIncludePath(sdl_dep.path("include-pregen"));
-    }
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.linkLibrary(sdl_dep.artifact("SDL3"));
 
     const zlib_dep = b.dependency("zlib", .{
         .target = target,

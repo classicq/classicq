@@ -20,32 +20,33 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <string.h>
 
-#define SDL_MAIN_HANDLED 1
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "quakedef.h"
 #include "sound.h"
 
-static SDL_AudioDeviceID g_dev;
+static SDL_AudioStream *g_stream;
 static int g_buffer_bytes;
 
-static void sdl_audio_callback(void *userdata, Uint8 *stream, int len)
+static void sdl_audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
 	struct SoundCard *sc = userdata;
 	int pos = sc->samplepos * (sc->samplebits / 8);
+	int len = additional_amount;
 
-	if (pos + len <= g_buffer_bytes)
+	(void)total_amount;
+
+	while (len > 0)
 	{
-		memcpy(stream, (Uint8 *)sc->buffer + pos, len);
-	}
-	else
-	{
-		int first = g_buffer_bytes - pos;
-		memcpy(stream, (Uint8 *)sc->buffer + pos, first);
-		memcpy(stream + first, sc->buffer, len - first);
+		int chunk = g_buffer_bytes - pos;
+		if (chunk > len)
+			chunk = len;
+		SDL_PutAudioStreamData(stream, (Uint8 *)sc->buffer + pos, chunk);
+		pos = (pos + chunk) % g_buffer_bytes;
+		len -= chunk;
 	}
 
-	sc->samplepos = ((pos + len) % g_buffer_bytes) / (sc->samplebits / 8);
+	sc->samplepos = pos / (sc->samplebits / 8);
 }
 
 static int sdl_audio_get_dma_pos(struct SoundCard *sc)
@@ -59,21 +60,21 @@ static void sdl_audio_submit(struct SoundCard *sc, unsigned int count)
 
 static void *sdl_audio_lock(struct SoundCard *sc)
 {
-	SDL_LockAudioDevice(g_dev);
+	SDL_LockAudioStream(g_stream);
 	return sc->buffer;
 }
 
 static void sdl_audio_unlock(struct SoundCard *sc)
 {
-	SDL_UnlockAudioDevice(g_dev);
+	SDL_UnlockAudioStream(g_stream);
 }
 
 static void sdl_audio_shutdown(struct SoundCard *sc)
 {
-	if (g_dev)
+	if (g_stream)
 	{
-		SDL_CloseAudioDevice(g_dev);
-		g_dev = 0;
+		SDL_DestroyAudioStream(g_stream);
+		g_stream = NULL;
 	}
 	if (sc->buffer)
 	{
@@ -85,7 +86,8 @@ static void sdl_audio_shutdown(struct SoundCard *sc)
 
 static qboolean sdl_audio_init(struct SoundCard *sc, int rate, int channels, int bits)
 {
-	SDL_AudioSpec desired, obtained;
+	SDL_AudioSpec spec, devspec;
+	int devframes = 0;
 
 	if (bits != 16)
 	{
@@ -93,55 +95,53 @@ static qboolean sdl_audio_init(struct SoundCard *sc, int rate, int channels, int
 		return false;
 	}
 
-	if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+	if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
 	{
 		Com_Printf("SDL_InitSubSystem(AUDIO) failed: %s\n", SDL_GetError());
 		return false;
 	}
 
-	memset(&desired, 0, sizeof(desired));
-	desired.freq = rate;
-	desired.format = AUDIO_S16SYS;
-	desired.channels = channels;
-	desired.samples = 1024;
-	desired.callback = sdl_audio_callback;
-	desired.userdata = sc;
-
-	g_dev = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained,
-		SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE);
-	if (g_dev == 0)
+	// match device rate to avoid resampling, like SDL2 ALLOW_FREQUENCY_CHANGE
+	if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &devspec, &devframes))
 	{
-		Com_Printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+		if (devspec.freq > 0)
+			rate = devspec.freq;
+		if (devspec.channels == 1)
+			channels = 1;
+	}
+	if (devframes < 1024 || devframes > 4096)
+		devframes = 1024;
+
+	memset(&spec, 0, sizeof(spec));
+	spec.freq = rate;
+	spec.format = SDL_AUDIO_S16;
+	spec.channels = channels;
+
+	g_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, sdl_audio_callback, sc);
+	if (!g_stream)
+	{
+		Com_Printf("SDL_OpenAudioDeviceStream failed: %s\n", SDL_GetError());
 		SDL_QuitSubSystem(SDL_INIT_AUDIO);
 		return false;
 	}
 
-	if (obtained.format != AUDIO_S16SYS)
-	{
-		Com_Printf("SDL audio: unexpected format 0x%x\n", obtained.format);
-		SDL_CloseAudioDevice(g_dev);
-		g_dev = 0;
-		SDL_QuitSubSystem(SDL_INIT_AUDIO);
-		return false;
-	}
-
-	g_buffer_bytes = obtained.samples * obtained.channels * 2 * 8;
+	g_buffer_bytes = devframes * channels * 2 * 8;
 	sc->buffer = malloc(g_buffer_bytes);
 	if (!sc->buffer)
 	{
 		Com_Printf("SDL audio: out of memory for %d-byte buffer\n", g_buffer_bytes);
-		SDL_CloseAudioDevice(g_dev);
-		g_dev = 0;
+		SDL_DestroyAudioStream(g_stream);
+		g_stream = NULL;
 		SDL_QuitSubSystem(SDL_INIT_AUDIO);
 		return false;
 	}
 	memset(sc->buffer, 0, g_buffer_bytes);
 
-	sc->channels = obtained.channels;
+	sc->channels = channels;
 	sc->samples = g_buffer_bytes / 2;
 	sc->samplepos = 0;
 	sc->samplebits = 16;
-	sc->speed = obtained.freq;
+	sc->speed = rate;
 
 	sc->GetDMAPos = sdl_audio_get_dma_pos;
 	sc->Submit = sdl_audio_submit;
@@ -149,10 +149,10 @@ static qboolean sdl_audio_init(struct SoundCard *sc, int rate, int channels, int
 	sc->Unlock = sdl_audio_unlock;
 	sc->Shutdown = sdl_audio_shutdown;
 
-	SDL_PauseAudioDevice(g_dev, 0);
+	SDL_ResumeAudioStreamDevice(g_stream);
 
 	Com_Printf("SDL audio: %d Hz, %d ch, %d-sample fragments\n",
-		obtained.freq, obtained.channels, obtained.samples);
+		rate, channels, devframes);
 
 	return true;
 }

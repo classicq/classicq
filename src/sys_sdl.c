@@ -24,7 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>
 
 #define SDL_MAIN_HANDLED 1
-#include <SDL.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 
 #include "quakedef.h"
 
@@ -301,7 +302,7 @@ int main(int argc, char **argv)
 
 	SDL_SetMainReady();
 
-	if (SDL_Init(0) != 0)
+	if (!SDL_Init(0))
 	{
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
 		return 1;

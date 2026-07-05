@@ -64,7 +64,7 @@ jobs:
         if: matrix.target == 'x86_64-linux-gnu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
+          sudo apt-get install -y libgl1-mesa-dev
 
       - name: Build release binary
         shell: bash
