@@ -41,6 +41,23 @@ static SDL_GPUCommandBuffer *frame_cmdbuf;
 static SDL_GPUGraphicsPipeline *pipe_ui;
 static SDL_GPUGraphicsPipeline *pipe_ui_alphatest;
 static SDL_GPUGraphicsPipeline *pipe_post;
+static SDL_GPUGraphicsPipeline *pipe_scene[SCENE_PIPE_COUNT];
+
+static SDL_GPUBuffer *scene_ibuf;
+static SDL_GPUTransferBuffer *scene_itbuf;
+static unsigned int scene_indices[GPU_SCENE_MAX_INDICES];
+static unsigned int scene_numindices;
+static scene_batch_t scene_batches[GPU_SCENE_MAX_BATCHES];
+static unsigned int scene_numbatches;
+static float scene_viewport[4];
+static int scene_has_viewport;
+
+static void (*scene_uploader)(SDL_GPUCopyPass *copy);
+
+static float autoid_modelview[16];
+static float autoid_projection[16];
+static int autoid_viewport[4];
+static int autoid_valid;
 
 static SDL_GPUSampler *samp_nearest;
 static SDL_GPUSampler *samp_linear;
@@ -176,6 +193,71 @@ static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUSha
 	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
 }
 
+static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs,
+	int blend_add, int depth_write, int color_write)
+{
+	SDL_GPUGraphicsPipelineCreateInfo ci;
+	SDL_GPUVertexBufferDescription vbd;
+	SDL_GPUVertexAttribute attrs[4];
+	SDL_GPUColorTargetDescription ct;
+
+	memset(&ci, 0, sizeof(ci));
+	memset(&vbd, 0, sizeof(vbd));
+	memset(&attrs, 0, sizeof(attrs));
+	memset(&ct, 0, sizeof(ct));
+
+	vbd.slot = 0;
+	vbd.pitch = sizeof(scene_vert_t);
+	vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+	attrs[0].location = 0;
+	attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+	attrs[0].offset = 0;
+	attrs[1].location = 1;
+	attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	attrs[1].offset = 12;
+	attrs[2].location = 2;
+	attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	attrs[2].offset = 20;
+	attrs[3].location = 3;
+	attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+	attrs[3].offset = 28;
+
+	ct.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	if (blend_add)
+	{
+		ct.blend_state.enable_blend = true;
+		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+	}
+	if (!color_write)
+		ct.blend_state.enable_color_write_mask = true;	// mask defaults to 0
+
+	ci.vertex_shader = vs;
+	ci.fragment_shader = fs;
+	ci.vertex_input_state.vertex_buffer_descriptions = &vbd;
+	ci.vertex_input_state.num_vertex_buffers = 1;
+	ci.vertex_input_state.vertex_attributes = attrs;
+	ci.vertex_input_state.num_vertex_attributes = 4;
+	ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+	ci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_FRONT;
+	ci.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+	ci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+	ci.depth_stencil_state.enable_depth_test = true;
+	ci.depth_stencil_state.enable_depth_write = depth_write != 0;
+	ci.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+	ci.target_info.color_target_descriptions = &ct;
+	ci.target_info.num_color_targets = 1;
+	ci.target_info.depth_stencil_format = scene_depth_format;
+	ci.target_info.has_depth_stencil_target = true;
+
+	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
+}
+
 static SDL_GPUSampler *make_sampler(SDL_GPUFilter filter, SDL_GPUSamplerAddressMode address)
 {
 	SDL_GPUSamplerCreateInfo ci;
@@ -196,14 +278,27 @@ static SDL_GPUSampler *make_sampler(SDL_GPUFilter filter, SDL_GPUSamplerAddressM
 static int create_pipelines(void)
 {
 	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
+	SDL_GPUShader *world_vs, *world_fs, *world_at_fs, *scene_fs, *scene_at_fs;
+	SDL_GPUShader *sky_vs, *sky_fs, *water_fs;
+	int i, ok;
 
 	ui_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(ui_vert), 0, 1);
 	ui_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(ui_frag), 1, 0);
 	ui_at_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(ui_alphatest_frag), 1, 0);
 	post_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(post_vert), 0, 0);
 	post_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(post_frag), 1, 1);
+	world_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(world_vert), 0, 1);
+	world_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(world_frag), 2, 0);
+	world_at_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(world_alphatest_frag), 2, 0);
+	scene_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(scene_frag), 1, 0);
+	scene_at_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(scene_alphatest_frag), 1, 0);
+	sky_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(sky_vert), 0, 1);
+	sky_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(sky_frag), 2, 0);
+	water_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(water_frag), 1, 1);
 
-	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs)
+	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs
+		|| !world_vs || !world_fs || !world_at_fs || !scene_fs || !scene_at_fs
+		|| !sky_vs || !sky_fs || !water_fs)
 	{
 		Com_Printf("GPU: shader creation failed: %s\n", SDL_GetError());
 		return 0;
@@ -213,13 +308,37 @@ static int create_pipelines(void)
 	pipe_ui_alphatest = make_ui_pipeline(ui_vs, ui_at_fs);
 	pipe_post = make_post_pipeline(post_vs, post_fs);
 
+	pipe_scene[SCENE_PIPE_WORLD] = make_scene_pipeline(world_vs, world_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_WORLD_ALPHATEST] = make_scene_pipeline(world_vs, world_at_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_TEX] = make_scene_pipeline(world_vs, scene_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_TEX_ALPHATEST_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_at_fs, 0, 0, 1);
+	pipe_scene[SCENE_PIPE_ADD_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, 1, 0, 1);
+	pipe_scene[SCENE_PIPE_SKY] = make_scene_pipeline(sky_vs, sky_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_DEPTHFILL] = make_scene_pipeline(world_vs, scene_fs, 0, 1, 0);
+	pipe_scene[SCENE_PIPE_WATER] = make_scene_pipeline(world_vs, water_fs, 0, 1, 1);
+
 	SDL_ReleaseGPUShader(gpu_device, ui_vs);
 	SDL_ReleaseGPUShader(gpu_device, ui_fs);
 	SDL_ReleaseGPUShader(gpu_device, ui_at_fs);
 	SDL_ReleaseGPUShader(gpu_device, post_vs);
 	SDL_ReleaseGPUShader(gpu_device, post_fs);
+	SDL_ReleaseGPUShader(gpu_device, world_vs);
+	SDL_ReleaseGPUShader(gpu_device, world_fs);
+	SDL_ReleaseGPUShader(gpu_device, world_at_fs);
+	SDL_ReleaseGPUShader(gpu_device, scene_fs);
+	SDL_ReleaseGPUShader(gpu_device, scene_at_fs);
+	SDL_ReleaseGPUShader(gpu_device, sky_vs);
+	SDL_ReleaseGPUShader(gpu_device, sky_fs);
+	SDL_ReleaseGPUShader(gpu_device, water_fs);
 
-	if (!pipe_ui || !pipe_ui_alphatest || !pipe_post)
+	ok = pipe_ui && pipe_ui_alphatest && pipe_post;
+	for (i = 0; i < SCENE_PIPE_COUNT; i++)
+	{
+		if (!pipe_scene[i])
+			ok = 0;
+	}
+
+	if (!ok)
 	{
 		Com_Printf("GPU: pipeline creation failed: %s\n", SDL_GetError());
 		return 0;
@@ -345,6 +464,23 @@ int GPU_Init(SDL_Window *window, int vsync)
 	tci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
 	ui_tbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
 
+	memset(&bci, 0, sizeof(bci));
+	bci.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+	bci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
+	scene_ibuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+	memset(&tci, 0, sizeof(tci));
+	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	tci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
+	scene_itbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+	if (!scene_ibuf || !scene_itbuf)
+	{
+		Com_Printf("GPU: scene buffer creation failed: %s\n", SDL_GetError());
+		GPU_Shutdown();
+		return 0;
+	}
+
 	if (!samp_nearest || !samp_linear || !samp_nearest_clamp || !samp_linear_clamp || !ui_vbuf || !ui_tbuf)
 	{
 		Com_Printf("GPU: resource creation failed: %s\n", SDL_GetError());
@@ -388,6 +524,24 @@ void GPU_Shutdown(void)
 	if (pipe_post)
 		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_post);
 	pipe_ui = pipe_ui_alphatest = pipe_post = NULL;
+
+	{
+		int i;
+		for (i = 0; i < SCENE_PIPE_COUNT; i++)
+		{
+			if (pipe_scene[i])
+				SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_scene[i]);
+			pipe_scene[i] = NULL;
+		}
+	}
+
+	if (scene_ibuf)
+		SDL_ReleaseGPUBuffer(gpu_device, scene_ibuf);
+	if (scene_itbuf)
+		SDL_ReleaseGPUTransferBuffer(gpu_device, scene_itbuf);
+	scene_ibuf = NULL;
+	scene_itbuf = NULL;
+	scene_uploader = NULL;
 
 	if (samp_nearest)
 		SDL_ReleaseGPUSampler(gpu_device, samp_nearest);
@@ -444,6 +598,7 @@ void GPU_BeginFrame(unsigned int width, unsigned int height)
 	}
 
 	Draw2D_FrameReset();
+	Scene_FrameReset();
 }
 
 void GPU_SetPostParams(float gamma, float contrast, const float blend[4])
@@ -461,6 +616,162 @@ static SDL_GPUSampler *sampler_for_prefs(int prefs)
 	return (prefs & GPU_TEXPREF_CLAMP) ? samp_nearest_clamp : samp_nearest;
 }
 
+// ---- 3D scene recording ----
+
+SDL_GPUBuffer *GPU_CreateStaticVertexBuffer(const scene_vert_t *verts, unsigned int count)
+{
+	SDL_GPUBufferCreateInfo bci;
+	SDL_GPUTransferBufferCreateInfo tci;
+	SDL_GPUBuffer *buf;
+	SDL_GPUTransferBuffer *tbuf;
+	SDL_GPUCommandBuffer *cmdbuf;
+	SDL_GPUCopyPass *copy;
+	SDL_GPUTransferBufferLocation src;
+	SDL_GPUBufferRegion dst;
+	void *mapped;
+
+	if (!gpu_device || !verts || !count)
+		return NULL;
+
+	memset(&bci, 0, sizeof(bci));
+	bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+	bci.size = count * sizeof(scene_vert_t);
+	buf = SDL_CreateGPUBuffer(gpu_device, &bci);
+	if (!buf)
+		return NULL;
+
+	memset(&tci, 0, sizeof(tci));
+	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	tci.size = bci.size;
+	tbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+	if (!tbuf)
+	{
+		SDL_ReleaseGPUBuffer(gpu_device, buf);
+		return NULL;
+	}
+
+	mapped = SDL_MapGPUTransferBuffer(gpu_device, tbuf, false);
+	if (mapped)
+	{
+		memcpy(mapped, verts, bci.size);
+		SDL_UnmapGPUTransferBuffer(gpu_device, tbuf);
+	}
+
+	cmdbuf = SDL_AcquireGPUCommandBuffer(gpu_device);
+	if (cmdbuf)
+	{
+		copy = SDL_BeginGPUCopyPass(cmdbuf);
+		memset(&src, 0, sizeof(src));
+		src.transfer_buffer = tbuf;
+		memset(&dst, 0, sizeof(dst));
+		dst.buffer = buf;
+		dst.size = bci.size;
+		SDL_UploadToGPUBuffer(copy, &src, &dst, false);
+		SDL_EndGPUCopyPass(copy);
+		SDL_SubmitGPUCommandBuffer(cmdbuf);
+	}
+
+	SDL_ReleaseGPUTransferBuffer(gpu_device, tbuf);
+	return buf;
+}
+
+void GPU_ReleaseBuffer(SDL_GPUBuffer *buf)
+{
+	if (gpu_device && buf)
+	{
+		SDL_WaitForGPUIdle(gpu_device);
+		SDL_ReleaseGPUBuffer(gpu_device, buf);
+	}
+}
+
+SDL_GPUTexture *GPU_CreateDynamicTexture(unsigned int width, unsigned int height)
+{
+	SDL_GPUTextureCreateInfo ci;
+
+	if (!gpu_device)
+		return NULL;
+
+	memset(&ci, 0, sizeof(ci));
+	ci.type = SDL_GPU_TEXTURETYPE_2D;
+	ci.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	ci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	ci.width = width;
+	ci.height = height;
+	ci.layer_count_or_depth = 1;
+	ci.num_levels = 1;
+	ci.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+	return SDL_CreateGPUTexture(gpu_device, &ci);
+}
+
+void GPU_ReleaseTexture(SDL_GPUTexture *tex)
+{
+	if (gpu_device && tex)
+	{
+		SDL_WaitForGPUIdle(gpu_device);
+		SDL_ReleaseGPUTexture(gpu_device, tex);
+	}
+}
+
+void Scene_FrameReset(void)
+{
+	scene_numindices = 0;
+	scene_numbatches = 0;
+	scene_has_viewport = 0;
+	autoid_valid = 0;
+}
+
+unsigned int *Scene_AllocIndices(unsigned int count, unsigned int *firstindex)
+{
+	if (scene_numindices + count > GPU_SCENE_MAX_INDICES)
+		return NULL;
+	*firstindex = scene_numindices;
+	scene_numindices += count;
+	return &scene_indices[*firstindex];
+}
+
+scene_batch_t *Scene_AddBatch(int pipe, int texnum, SDL_GPUTexture *tex2, SDL_GPUBuffer *vbuf,
+	unsigned int firstindex, unsigned int numindices, const float *mvp)
+{
+	scene_batch_t *b;
+
+	if (scene_numbatches >= GPU_SCENE_MAX_BATCHES || !numindices)
+		return NULL;
+
+	b = &scene_batches[scene_numbatches++];
+	memset(b, 0, sizeof(*b));
+	b->pipe = pipe;
+	b->texnum = texnum;
+	b->tex2 = tex2;
+	b->vbuf = vbuf;
+	b->firstindex = firstindex;
+	b->numindices = numindices;
+	memcpy(b->mvp, mvp, sizeof(b->mvp));
+	return b;
+}
+
+void Scene_SetViewport(float x, float y, float w, float h)
+{
+	scene_viewport[0] = x;
+	scene_viewport[1] = y;
+	scene_viewport[2] = w;
+	scene_viewport[3] = h;
+	scene_has_viewport = 1;
+}
+
+void GPU_SetSceneUploader(void (*fn)(SDL_GPUCopyPass *copy))
+{
+	scene_uploader = fn;
+}
+
+void GPU_SetSceneMatrices(const float *modelview, const float *projection, const int *viewport)
+{
+	memcpy(autoid_modelview, modelview, sizeof(autoid_modelview));
+	memcpy(autoid_projection, projection, sizeof(autoid_projection));
+	memcpy(autoid_viewport, viewport, sizeof(autoid_viewport));
+	autoid_valid = 1;
+}
+
 // scene render pass: clear + all recorded 2D batches
 static void record_scene_pass(void)
 {
@@ -474,27 +785,58 @@ static void record_scene_pass(void)
 	verts = Draw2D_GetVerts(&numverts);
 	batches = Draw2D_GetBatches(&numbatches);
 
-	if (numverts)
+	if (numverts || scene_numindices || scene_uploader)
 	{
 		SDL_GPUCopyPass *copy;
 		SDL_GPUTransferBufferLocation src;
 		SDL_GPUBufferRegion dst;
 		void *mapped;
 
-		mapped = SDL_MapGPUTransferBuffer(gpu_device, ui_tbuf, true);
-		if (mapped)
+		if (numverts)
 		{
-			memcpy(mapped, verts, numverts * sizeof(ui_vert_t));
-			SDL_UnmapGPUTransferBuffer(gpu_device, ui_tbuf);
+			mapped = SDL_MapGPUTransferBuffer(gpu_device, ui_tbuf, true);
+			if (mapped)
+			{
+				memcpy(mapped, verts, numverts * sizeof(ui_vert_t));
+				SDL_UnmapGPUTransferBuffer(gpu_device, ui_tbuf);
+			}
+		}
+
+		if (scene_numindices)
+		{
+			mapped = SDL_MapGPUTransferBuffer(gpu_device, scene_itbuf, true);
+			if (mapped)
+			{
+				memcpy(mapped, scene_indices, scene_numindices * sizeof(unsigned int));
+				SDL_UnmapGPUTransferBuffer(gpu_device, scene_itbuf);
+			}
 		}
 
 		copy = SDL_BeginGPUCopyPass(frame_cmdbuf);
-		memset(&src, 0, sizeof(src));
-		src.transfer_buffer = ui_tbuf;
-		memset(&dst, 0, sizeof(dst));
-		dst.buffer = ui_vbuf;
-		dst.size = numverts * sizeof(ui_vert_t);
-		SDL_UploadToGPUBuffer(copy, &src, &dst, true);
+
+		if (numverts)
+		{
+			memset(&src, 0, sizeof(src));
+			src.transfer_buffer = ui_tbuf;
+			memset(&dst, 0, sizeof(dst));
+			dst.buffer = ui_vbuf;
+			dst.size = numverts * sizeof(ui_vert_t);
+			SDL_UploadToGPUBuffer(copy, &src, &dst, true);
+		}
+
+		if (scene_numindices)
+		{
+			memset(&src, 0, sizeof(src));
+			src.transfer_buffer = scene_itbuf;
+			memset(&dst, 0, sizeof(dst));
+			dst.buffer = scene_ibuf;
+			dst.size = scene_numindices * sizeof(unsigned int);
+			SDL_UploadToGPUBuffer(copy, &src, &dst, true);
+		}
+
+		if (scene_uploader)
+			scene_uploader(copy);
+
 		SDL_EndGPUCopyPass(copy);
 	}
 
@@ -517,6 +859,99 @@ static void record_scene_pass(void)
 	pass = SDL_BeginGPURenderPass(frame_cmdbuf, &ct, 1, &ds);
 	if (!pass)
 		return;
+
+	if (scene_numbatches)
+	{
+		SDL_GPUBufferBinding ib;
+		SDL_GPUBuffer *bound_vbuf = NULL;
+		unsigned int i;
+
+		if (scene_has_viewport)
+		{
+			SDL_GPUViewport vp;
+			vp.x = scene_viewport[0];
+			vp.y = scene_viewport[1];
+			vp.w = scene_viewport[2];
+			vp.h = scene_viewport[3];
+			vp.min_depth = 0.0f;
+			vp.max_depth = 1.0f;
+			SDL_SetGPUViewport(pass, &vp);
+		}
+
+		memset(&ib, 0, sizeof(ib));
+		ib.buffer = scene_ibuf;
+		SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+		for (i = 0; i < scene_numbatches; i++)
+		{
+			scene_batch_t *b = &scene_batches[i];
+			SDL_GPUTextureSamplerBinding tsb[2];
+			SDL_GPUTexture *tex;
+			int prefs = 0;
+			int numtex;
+
+			tex = GPU_Texture_Lookup(b->texnum, &prefs);
+			if (!tex || !b->vbuf)
+				continue;
+
+			if (b->vbuf != bound_vbuf)
+			{
+				SDL_GPUBufferBinding vb;
+				memset(&vb, 0, sizeof(vb));
+				vb.buffer = b->vbuf;
+				SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+				bound_vbuf = b->vbuf;
+			}
+
+			SDL_BindGPUGraphicsPipeline(pass, pipe_scene[b->pipe]);
+
+			if (b->pipe == SCENE_PIPE_SKY)
+			{
+				struct
+				{
+					float mvp[16];
+					float params[8];
+				} ubo;
+				memcpy(ubo.mvp, b->mvp, sizeof(ubo.mvp));
+				memcpy(ubo.params, b->params, sizeof(ubo.params));
+				SDL_PushGPUVertexUniformData(frame_cmdbuf, 0, &ubo, sizeof(ubo));
+			}
+			else
+			{
+				SDL_PushGPUVertexUniformData(frame_cmdbuf, 0, b->mvp, sizeof(b->mvp));
+			}
+
+			if (b->pipe == SCENE_PIPE_WATER)
+				SDL_PushGPUFragmentUniformData(frame_cmdbuf, 0, b->params, 4 * sizeof(float));
+
+			memset(tsb, 0, sizeof(tsb));
+			tsb[0].texture = tex;
+			tsb[0].sampler = sampler_for_prefs(prefs);
+			numtex = 1;
+			if (b->pipe == SCENE_PIPE_WORLD || b->pipe == SCENE_PIPE_WORLD_ALPHATEST
+				|| b->pipe == SCENE_PIPE_SKY)
+			{
+				tsb[1].texture = b->tex2 ? b->tex2 : tex;
+				tsb[1].sampler = samp_linear;
+				numtex = 2;
+			}
+			SDL_BindGPUFragmentSamplers(pass, 0, tsb, numtex);
+
+			SDL_DrawGPUIndexedPrimitives(pass, b->numindices, 1, b->firstindex, 0, 0);
+		}
+
+		if (scene_has_viewport)
+		{
+			SDL_GPUViewport vp;
+			vp.x = 0.0f;
+			vp.y = 0.0f;
+			vp.w = (float)scene_width;
+			vp.h = (float)scene_height;
+			vp.min_depth = 0.0f;
+			vp.max_depth = 1.0f;
+			SDL_SetGPUViewport(pass, &vp);
+		}
+	}
 
 	if (numbatches)
 	{
@@ -666,11 +1101,12 @@ SDL_GPUTextureFormat GPU_GetSceneDepthFormat(void)
 
 int GPU_GetSceneMatrices(float *modelview, float *projection, int *viewport)
 {
-	// filled in once the 3D scene renders through gpu modules
-	(void)modelview;
-	(void)projection;
-	(void)viewport;
-	return 0;
+	if (!autoid_valid)
+		return 0;
+	memcpy(modelview, autoid_modelview, sizeof(autoid_modelview));
+	memcpy(projection, autoid_projection, sizeof(autoid_projection));
+	memcpy(viewport, autoid_viewport, sizeof(autoid_viewport));
+	return 1;
 }
 
 int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height)

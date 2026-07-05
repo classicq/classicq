@@ -57,6 +57,63 @@ SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs);
 int GPU_Texture_White(void);
 SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int width, unsigned int height, int mipmap);
 
+// ---- 3D scene (recorded during R_RenderView, executed in GPU_EndFrame) ----
+
+typedef struct scene_vert_s
+{
+	float pos[3];
+	float st[2];
+	float lm[2];
+	unsigned char rgba[4];
+} scene_vert_t;
+
+enum
+{
+	SCENE_PIPE_WORLD,               // tex * lightmap, opaque
+	SCENE_PIPE_WORLD_ALPHATEST,     // fence/alpha chain
+	SCENE_PIPE_TEX,                 // tex * color, opaque (skybox, flat fills)
+	SCENE_PIPE_TEX_ALPHATEST_NODEPTHWRITE,  // fullbright second pass
+	SCENE_PIPE_ADD_NODEPTHWRITE,    // luma pass, blend one/one
+	SCENE_PIPE_SKY,                 // two scrolling layers
+	SCENE_PIPE_DEPTHFILL,           // skybox z fill, no color writes
+	SCENE_PIPE_WATER,               // fs warp
+	SCENE_PIPE_COUNT
+};
+
+#define SCENE_MAX_PARAMS 8
+
+typedef struct scene_batch_s
+{
+	int pipe;
+	int texnum;                 // main texture via texture table
+	SDL_GPUTexture *tex2;       // lightmap page or sky alpha layer, owned by caller
+	SDL_GPUBuffer *vbuf;        // static vertex buffer the indices refer to
+	unsigned int firstindex;
+	unsigned int numindices;
+	float mvp[16];
+	float params[SCENE_MAX_PARAMS];  // sky: origin xyz + speed1, speed2; water: cltime
+} scene_batch_t;
+
+#define GPU_SCENE_MAX_INDICES (1 << 20)
+#define GPU_SCENE_MAX_BATCHES 8192
+
+SDL_GPUBuffer *GPU_CreateStaticVertexBuffer(const scene_vert_t *verts, unsigned int count);
+void GPU_ReleaseBuffer(SDL_GPUBuffer *buf);
+SDL_GPUTexture *GPU_CreateDynamicTexture(unsigned int width, unsigned int height);
+void GPU_ReleaseTexture(SDL_GPUTexture *tex);
+
+void Scene_FrameReset(void);
+unsigned int *Scene_AllocIndices(unsigned int count, unsigned int *firstindex);
+scene_batch_t *Scene_AddBatch(int pipe, int texnum, SDL_GPUTexture *tex2, SDL_GPUBuffer *vbuf,
+	unsigned int firstindex, unsigned int numindices, const float *mvp);
+void Scene_SetViewport(float x, float y, float w, float h);
+
+// copy-pass hook for dirty lightmap uploads, runs right before the scene pass
+void GPU_SetSceneUploader(void (*fn)(SDL_GPUCopyPass *copy));
+
+// latched for autoID readback
+void GPU_SetSceneMatrices(const float *modelview, const float *projection, const int *viewport);
+
 // ---- 2D batcher (gpu_draw2d.c) ----
 
 #define GPU_UI_MAX_VERTS 65536
