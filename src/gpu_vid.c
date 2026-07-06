@@ -197,8 +197,10 @@ static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUSha
 	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
 }
 
+enum { SCENE_BLEND_NONE, SCENE_BLEND_ADD, SCENE_BLEND_ALPHA };
+
 static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs,
-	int blend_add, int depth_write, int color_write)
+	int blend_mode, int depth_write, int color_write)
 {
 	SDL_GPUGraphicsPipelineCreateInfo ci;
 	SDL_GPUVertexBufferDescription vbd;
@@ -228,7 +230,7 @@ static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUSh
 	attrs[3].offset = 28;
 
 	ct.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-	if (blend_add)
+	if (blend_mode == SCENE_BLEND_ADD)
 	{
 		ct.blend_state.enable_blend = true;
 		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
@@ -237,6 +239,16 @@ static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUSh
 		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+	}
+	else if (blend_mode == SCENE_BLEND_ALPHA)
+	{
+		ct.blend_state.enable_blend = true;
+		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
 	}
 	if (!color_write)
 		ct.blend_state.enable_color_write_mask = true;	// mask defaults to 0
@@ -283,7 +295,7 @@ static int create_pipelines(void)
 {
 	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
 	SDL_GPUShader *world_vs, *world_fs, *world_at_fs, *scene_fs, *scene_at_fs;
-	SDL_GPUShader *sky_vs, *sky_fs, *water_fs;
+	SDL_GPUShader *sky_vs, *sky_fs, *water_fs, *alias_fb_fs;
 	int i, ok;
 
 	ui_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(ui_vert), 0, 1);
@@ -299,10 +311,11 @@ static int create_pipelines(void)
 	sky_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(sky_vert), 0, 1);
 	sky_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(sky_frag), 2, 0);
 	water_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(water_frag), 1, 1);
+	alias_fb_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(alias_fb_frag), 2, 0);
 
 	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs
 		|| !world_vs || !world_fs || !world_at_fs || !scene_fs || !scene_at_fs
-		|| !sky_vs || !sky_fs || !water_fs)
+		|| !sky_vs || !sky_fs || !water_fs || !alias_fb_fs)
 	{
 		Com_Printf("GPU: shader creation failed: %s\n", SDL_GetError());
 		return 0;
@@ -316,10 +329,13 @@ static int create_pipelines(void)
 	pipe_scene[SCENE_PIPE_WORLD_ALPHATEST] = make_scene_pipeline(world_vs, world_at_fs, 0, 1, 1);
 	pipe_scene[SCENE_PIPE_TEX] = make_scene_pipeline(world_vs, scene_fs, 0, 1, 1);
 	pipe_scene[SCENE_PIPE_TEX_ALPHATEST_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_at_fs, 0, 0, 1);
-	pipe_scene[SCENE_PIPE_ADD_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, 1, 0, 1);
+	pipe_scene[SCENE_PIPE_ADD_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ADD, 0, 1);
 	pipe_scene[SCENE_PIPE_SKY] = make_scene_pipeline(sky_vs, sky_fs, 0, 1, 1);
 	pipe_scene[SCENE_PIPE_DEPTHFILL] = make_scene_pipeline(world_vs, scene_fs, 0, 1, 0);
 	pipe_scene[SCENE_PIPE_WATER] = make_scene_pipeline(world_vs, water_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_TEX_BLEND] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ALPHA, 1, 1);
+	pipe_scene[SCENE_PIPE_TEX_ALPHATEST] = make_scene_pipeline(world_vs, scene_at_fs, 0, 1, 1);
+	pipe_scene[SCENE_PIPE_ALIAS_FB] = make_scene_pipeline(world_vs, alias_fb_fs, SCENE_BLEND_ALPHA, 1, 1);
 
 	SDL_ReleaseGPUShader(gpu_device, ui_vs);
 	SDL_ReleaseGPUShader(gpu_device, ui_fs);
@@ -334,6 +350,7 @@ static int create_pipelines(void)
 	SDL_ReleaseGPUShader(gpu_device, sky_vs);
 	SDL_ReleaseGPUShader(gpu_device, sky_fs);
 	SDL_ReleaseGPUShader(gpu_device, water_fs);
+	SDL_ReleaseGPUShader(gpu_device, alias_fb_fs);
 
 	ok = pipe_ui && pipe_ui_alphatest && pipe_post;
 	if (!ok)
@@ -786,6 +803,8 @@ scene_batch_t *Scene_AddBatch(int pipe, int texnum, SDL_GPUTexture *tex2, SDL_GP
 	b->vbuf = vbuf;
 	b->firstindex = firstindex;
 	b->numindices = numindices;
+	b->depth_min = 0.0f;
+	b->depth_max = 1.0f;
 	memcpy(b->mvp, mvp, sizeof(b->mvp));
 	return b;
 }
@@ -924,6 +943,7 @@ static void record_scene_pass(void)
 	{
 		SDL_GPUBufferBinding ib;
 		SDL_GPUBuffer *bound_vbuf = NULL;
+		float cur_depth_min = 0.0f, cur_depth_max = 1.0f;
 		unsigned int i;
 
 		if (scene_has_viewport)
@@ -953,6 +973,20 @@ static void record_scene_pass(void)
 			tex = GPU_Texture_Lookup(b->texnum, &prefs);
 			if (!tex || !b->vbuf)
 				continue;
+
+			if (b->depth_min != cur_depth_min || b->depth_max != cur_depth_max)
+			{
+				SDL_GPUViewport vp;
+				vp.x = scene_has_viewport ? scene_viewport[0] : 0.0f;
+				vp.y = scene_has_viewport ? scene_viewport[1] : 0.0f;
+				vp.w = scene_has_viewport ? scene_viewport[2] : (float)scene_width;
+				vp.h = scene_has_viewport ? scene_viewport[3] : (float)scene_height;
+				vp.min_depth = b->depth_min;
+				vp.max_depth = b->depth_max;
+				SDL_SetGPUViewport(pass, &vp);
+				cur_depth_min = b->depth_min;
+				cur_depth_max = b->depth_max;
+			}
 
 			if (b->vbuf != bound_vbuf)
 			{
@@ -989,7 +1023,7 @@ static void record_scene_pass(void)
 			tsb[0].sampler = sampler_for_prefs(prefs);
 			numtex = 1;
 			if (b->pipe == SCENE_PIPE_WORLD || b->pipe == SCENE_PIPE_WORLD_ALPHATEST
-				|| b->pipe == SCENE_PIPE_SKY)
+				|| b->pipe == SCENE_PIPE_SKY || b->pipe == SCENE_PIPE_ALIAS_FB)
 			{
 				tsb[1].texture = b->tex2 ? b->tex2 : tex;
 				tsb[1].sampler = samp_linear;

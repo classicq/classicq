@@ -77,6 +77,9 @@ enum
 	SCENE_PIPE_SKY,                 // two scrolling layers
 	SCENE_PIPE_DEPTHFILL,           // skybox z fill, no color writes
 	SCENE_PIPE_WATER,               // fs warp
+	SCENE_PIPE_TEX_BLEND,           // alias models, alpha blend (opaque at a=255)
+	SCENE_PIPE_TEX_ALPHATEST,       // sprites, depth write on
+	SCENE_PIPE_ALIAS_FB,            // alias base + fullbright decal, 2 textures
 	SCENE_PIPE_COUNT
 };
 
@@ -90,6 +93,8 @@ typedef struct scene_batch_s
 	SDL_GPUBuffer *vbuf;        // static vertex buffer the indices refer to
 	unsigned int firstindex;
 	unsigned int numindices;
+	float depth_min;            // viewport depth range, viewmodel squashes to 0..0.3
+	float depth_max;
 	float mvp[16];
 	float params[SCENE_MAX_PARAMS];  // sky: origin xyz + speed1, speed2; water: cltime
 } scene_batch_t;

@@ -331,31 +331,6 @@ void Draw_SetSize(unsigned int width, unsigned int height)
 	(void)width; (void)height;
 }
 
-// ---- skins ----
-
-struct SkinImp *SkinImp_CreateSolidColour(float *colours)
-{
-	(void)colours;
-	return calloc(1, sizeof(struct SkinImp));
-}
-
-struct SkinImp *SkinImp_CreateTexturePaletted(void *data, unsigned int width, unsigned int height, unsigned int modulo)
-{
-	(void)data; (void)width; (void)height; (void)modulo;
-	return calloc(1, sizeof(struct SkinImp));
-}
-
-struct SkinImp *SkinImp_CreateTextureTruecolour(void *data, unsigned int width, unsigned int height)
-{
-	(void)data; (void)width; (void)height;
-	return calloc(1, sizeof(struct SkinImp));
-}
-
-void SkinImp_Destroy(struct SkinImp *skin)
-{
-	free(skin);
-}
-
 // ---- particles ----
 
 void GL_Particles_CvarInit(void) {}

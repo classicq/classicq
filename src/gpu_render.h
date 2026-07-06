@@ -37,4 +37,9 @@ extern float r_viewproj[16];
 struct SDL_GPUCopyPass;
 void World_UploadLightmaps(struct SDL_GPUCopyPass *copy);
 
+// gpu_alias.c
+void R_DrawAliasModel(entity_t *ent);
+void R_DrawSpriteModel(entity_t *e);
+void R_DrawViewModel(void);
+
 #endif

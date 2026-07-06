@@ -545,8 +545,10 @@ void R_DrawEntitiesOnList(visentlist_t *vislist)
 				R_DrawBrushModel(currententity);
 				break;
 			case mod_alias:
+				R_DrawAliasModel(currententity);
+				break;
 			case mod_sprite:
-				// TODO M4: alias and sprite models
+				R_DrawSpriteModel(currententity);
 				break;
 		}
 	}
@@ -600,7 +602,7 @@ void R_RenderView(void)
 	R_RenderDlights();
 	R_DrawParticles();
 
-	// TODO M4: R_DrawViewModel
+	R_DrawViewModel();
 
 	if (r_speeds.value)
 	{
