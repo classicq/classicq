@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "gpu_local.h"
 
-#include "shaders/shaders_gen.h"	// regenerate via src/shaders/compile.ps1 after edits
+#include "shaders_gen.h"	// regenerate via src/shaders/compile.ps1 after edits
 
 #define UI_MAX_VERTS GPU_UI_MAX_VERTS
 
