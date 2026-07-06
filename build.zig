@@ -194,6 +194,7 @@ const common_sources = [_][]const u8{
     "gl_refrag.c",
     "gpu_alias.c",
     "gpu_draw2d.c",
+    "gpu_part.c",
     "gpu_rmain.c",
     "gpu_stub.c",
     "gpu_texture.c",

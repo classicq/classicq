@@ -79,8 +79,6 @@ cvar_t	gl_part_telesplash = {"gl_part_telesplash", "0"};
 cvar_t	gl_part_blobs = {"gl_part_blobs", "0"};
 cvar_t	gl_part_lavasplash = {"gl_part_lavasplash", "1"};
 cvar_t	gl_part_inferno = {"gl_part_inferno", "1"};
-cvar_t	gl_clipparticles = {"gl_clipparticles", "1"};
-cvar_t	gl_bounceparticles = {"gl_bounceparticles", "1"};
 cvar_t	gl_max_size = {"gl_max_size", "512"};
 cvar_t	gl_miptexLevel = {"gl_miptexLevel", "0"};
 cvar_t	gl_scaleModelTextures = {"gl_scaleModelTextures", "0"};
@@ -98,7 +96,7 @@ static cvar_t *stub_cvars[] = {
 	&gl_fb_models, &gl_lightmode, &gl_loadlitfiles, &r_skyname, &gl_water_program,
 	&gl_part_explosions, &gl_part_trails, &gl_part_spikes, &gl_part_gunshots,
 	&gl_part_blood, &gl_part_telesplash, &gl_part_blobs, &gl_part_lavasplash,
-	&gl_part_inferno, &gl_clipparticles, &gl_bounceparticles, &gl_max_size,
+	&gl_part_inferno, &gl_max_size,
 	&gl_miptexLevel, &gl_scaleModelTextures, &gl_scaleTurbTextures,
 	&gl_externalTextures_world, &gl_externalTextures_bmodels,
 };
@@ -141,8 +139,6 @@ qboolean gl_mtexable = true;
 int gl_textureunits = 4;
 qboolean gl_combine, gl_add_ext, gl_npot = true, gl_vbo = false;
 qboolean gl_vs, gl_fs, gl_fbo = true;
-
-qboolean qmb_initialized;
 
 unsigned d_8to24table[256];
 unsigned d_8to24table2[256];
@@ -241,6 +237,8 @@ void R_CvarInit(void)
 
 	for (i = 0; i < sizeof(stub_cvars) / sizeof(*stub_cvars); i++)
 		Cvar_Register(stub_cvars[i]);
+
+	GL_Particles_CvarInit();
 }
 
 void R_InitEfrags(void) {}
@@ -329,51 +327,6 @@ void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, co
 void Draw_SetSize(unsigned int width, unsigned int height)
 {
 	(void)width; (void)height;
-}
-
-// ---- particles ----
-
-void GL_Particles_CvarInit(void) {}
-void GL_Particles_TextureInit(void) {}
-
-void GL_DrawParticleInit(void) {}
-void GL_DrawParticleBegin(void) {}
-void GL_DrawParticleEnd(void) {}
-
-void GL_DrawParticle(particle_t *p)
-{
-	(void)p;
-}
-
-int QMB_InitParticles(void)
-{
-	return 0;
-}
-
-void QMB_ShutdownParticles(void) {}
-void QMB_ClearParticles(void) {}
-void QMB_DrawParticles(void) {}
-
-void QMB_RunParticleEffect(const vec3_t org, const vec3_t dir, int color, int count)
-{
-	(void)org; (void)dir; (void)color; (void)count;
-}
-
-void QMB_ParticleTrail(vec3_t start, vec3_t end, vec3_t *trail_origin, trail_type_t type)
-{
-	(void)start; (void)end; (void)trail_origin; (void)type;
-}
-
-void QMB_BlobExplosion(vec3_t org) { (void)org; }
-void QMB_ParticleExplosion(vec3_t org) { (void)org; }
-void QMB_LavaSplash(vec3_t org) { (void)org; }
-void QMB_TeleportSplash(vec3_t org) { (void)org; }
-void QMB_DetpackExplosion(vec3_t org) { (void)org; }
-void QMB_InfernoFlame(vec3_t org) { (void)org; }
-
-void QMB_StaticBubble(entity_t *ent)
-{
-	(void)ent;
 }
 
 // ---- misc gl-side entry points still referenced ----

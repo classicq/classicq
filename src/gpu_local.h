@@ -80,6 +80,9 @@ enum
 	SCENE_PIPE_TEX_BLEND,           // alias models, alpha blend (opaque at a=255)
 	SCENE_PIPE_TEX_ALPHATEST,       // sprites, depth write on
 	SCENE_PIPE_ALIAS_FB,            // alias base + fullbright decal, 2 textures
+	SCENE_PIPE_TEX_BLEND_NODEPTHWRITE,      // QMB lavasplash/blood3/bubble
+	SCENE_PIPE_ADDALPHA_NODEPTHWRITE,       // QMB sparks/fire/smoke, srcalpha/one
+	SCENE_PIPE_INVSRCCOLOR_NODEPTHWRITE,    // QMB blood1/blood2, zero/1-srccolor
 	SCENE_PIPE_COUNT
 };
 

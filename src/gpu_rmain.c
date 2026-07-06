@@ -205,11 +205,6 @@ void R_AnimateLight(void)
 	}
 }
 
-void R_RenderDlights(void)
-{
-	// TODO M5: flashblend light bubbles
-}
-
 void R_MarkLights(model_t *model, dlight_t *light, int bit, unsigned int nodenum)
 {
 	mnode_t *node;
@@ -674,6 +669,7 @@ int R_Init(void)
 
 void R_InitGL(void)
 {
+	Classic_LoadParticleTextures();
 }
 
 void R_Shutdown(void)

@@ -197,7 +197,7 @@ static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUSha
 	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
 }
 
-enum { SCENE_BLEND_NONE, SCENE_BLEND_ADD, SCENE_BLEND_ALPHA };
+enum { SCENE_BLEND_NONE, SCENE_BLEND_ADD, SCENE_BLEND_ALPHA, SCENE_BLEND_ADDALPHA, SCENE_BLEND_INVSRCCOLOR };
 
 static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs,
 	int blend_mode, int depth_write, int color_write)
@@ -249,6 +249,26 @@ static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUSh
 		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
 		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+	}
+	else if (blend_mode == SCENE_BLEND_ADDALPHA)
+	{
+		ct.blend_state.enable_blend = true;
+		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+	}
+	else if (blend_mode == SCENE_BLEND_INVSRCCOLOR)
+	{
+		ct.blend_state.enable_blend = true;
+		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
+		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 	}
 	if (!color_write)
 		ct.blend_state.enable_color_write_mask = true;	// mask defaults to 0
@@ -336,6 +356,9 @@ static int create_pipelines(void)
 	pipe_scene[SCENE_PIPE_TEX_BLEND] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ALPHA, 1, 1);
 	pipe_scene[SCENE_PIPE_TEX_ALPHATEST] = make_scene_pipeline(world_vs, scene_at_fs, 0, 1, 1);
 	pipe_scene[SCENE_PIPE_ALIAS_FB] = make_scene_pipeline(world_vs, alias_fb_fs, SCENE_BLEND_ALPHA, 1, 1);
+	pipe_scene[SCENE_PIPE_TEX_BLEND_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ALPHA, 0, 1);
+	pipe_scene[SCENE_PIPE_ADDALPHA_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ADDALPHA, 0, 1);
+	pipe_scene[SCENE_PIPE_INVSRCCOLOR_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_INVSRCCOLOR, 0, 1);
 
 	SDL_ReleaseGPUShader(gpu_device, ui_vs);
 	SDL_ReleaseGPUShader(gpu_device, ui_fs);
