@@ -10,9 +10,6 @@
             .url = "git+https://github.com/allyourcodebase/libpng#e123eca2140de78f1017a46c24e330fb3024fc58",
             .hash = "libpng-1.6.57-oiaFGuYqAAB3CK1mjIzXHn2Z3EVV9okuko-VH23OOSV_",
         },
-        .libjpeg = .{
-            .path = "third_party/libjpeg",
-        },
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git?ref=v0.5.2+3.4.12#1b67d371a531ecb0499d4b80a865631c299f472a",
             .hash = "sdl-0.5.2+3.4.12-SDL--qPKpwHc40bqAlYs7W9pXJVyLwsGDNa4shNXbOZr",

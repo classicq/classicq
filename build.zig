@@ -37,12 +37,6 @@ pub fn build(b: *std.Build) void {
     });
     root_mod.linkLibrary(libpng_dep.artifact("png"));
 
-    const libjpeg_dep = b.dependency("libjpeg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    root_mod.linkLibrary(libjpeg_dep.artifact("jpeg"));
-
     // shaders_gen.h built from the committed blobs in src/shaders/compiled
     const wf = b.addWriteFiles();
     _ = wf.add("shaders_gen.h", makeShaderHeader(b) catch @panic("src/shaders/compiled unreadable"));
@@ -57,7 +51,7 @@ pub fn build(b: *std.Build) void {
         "-DNETQW",
         "-DGLQUAKE",
         "-DUSE_PNG=1",
-        "-DUSE_JPEG=1",
+        "-DUSE_JPEG=0",
         "-DUSE_ZLIB=1",
         "-DUSE_LUA=0",
         "-DBUILD_STRL",
