@@ -19,7 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <stdlib.h>
 #include <string.h>
-#include <malloc.h>
 
 #include "quakedef.h"
 #include "gl_local.h"
@@ -109,10 +108,6 @@ SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int wi
 		ci.num_levels = mip_levels(width, height);
 	}
 
-	{
-		extern void World_DebugLog(const char *msg);
-		World_DebugLog("CT in");
-	}
 	tex = SDL_CreateGPUTexture(device, &ci);
 	if (!tex)
 	{
@@ -168,10 +163,6 @@ SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int wi
 	SDL_SubmitGPUCommandBuffer(cmdbuf);
 	SDL_ReleaseGPUTransferBuffer(device, tbuf);
 
-	{
-		extern void World_DebugLog(const char *msg);
-		World_DebugLog("CT out");
-	}
 	return tex;
 }
 
@@ -293,17 +284,6 @@ static int prefs_for_mode(int mode)
 
 void GL_Upload32(unsigned *data, int width, int height, int mode)
 {
-	// TEMP M3 diagnostics
-	if (mode & TEX_MIPMAP)
-	{
-		static int once;
-		extern void World_DebugLog(const char *msg);
-		if (!once)
-		{
-			once = 1;
-			World_DebugLog("GL_Upload32: first mipmapped");
-		}
-	}
 	int scaled_width, scaled_height;
 	unsigned char *scaled = NULL;
 	const unsigned char *pixels = (const unsigned char *)data;
@@ -380,15 +360,6 @@ static gltexture_t *find_texture(const char *identifier)
 
 int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode, int bpp)
 {
-	// TEMP M3 diagnostics
-	{
-		extern void World_DebugLog(const char *msg);
-		char tmp[96];
-		snprintf(tmp, sizeof(tmp), "GL_LoadTexture %s %dx%d m%d b%d heap=%d",
-			identifier && identifier[0] ? identifier : "(anon)", width, height, mode, bpp,
-			_heapchk());
-		World_DebugLog(tmp);
-	}
 	gltexture_t *glt = NULL;
 	int scaled_width, scaled_height;
 	unsigned int crc = 0;
@@ -440,10 +411,6 @@ int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode
 	else
 		Sys_Error("GL_LoadTexture: unsupported bpp %d", bpp);
 
-	{
-		extern void World_DebugLog(const char *msg);
-		World_DebugLog("LT done");
-	}
 	return glt->texnum;
 }
 

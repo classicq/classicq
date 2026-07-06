@@ -307,8 +307,21 @@ qboolean GL_PostProcess_IsReady(void)
 
 void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, const float blend[4])
 {
+	float brighten = 1.0f, f;
+
 	(void)color_tex;
-	GPU_SetPostParams(gamma, contrast, blend);
+
+	// GL R_BrightenScreen doubled the framebuffer per loop pass (its per-pass
+	// colour never applied, the colour array was left disabled) on top of the
+	// post shader contrast; players are calibrated to that look, replicate it
+	f = pow(min(contrast, 3.0f), vid_gamma);
+	while (f > 1.0f)
+	{
+		brighten *= 2.0f;
+		f *= 0.5f;
+	}
+
+	GPU_SetPostParams(gamma, contrast * brighten, blend);
 }
 
 // ---- 2D leftovers (rest lives in gpu_draw2d.c) ----

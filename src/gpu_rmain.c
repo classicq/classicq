@@ -691,12 +691,6 @@ void R_NewMap(void)
 {
 	int i, waterline;
 
-	// TEMP M3 diagnostics
-	{
-		extern void World_DebugLog(const char *msg);
-		World_DebugLog("R_NewMap: enter");
-	}
-
 	for (i = 0; i < 256; i++)
 		d_lightstylevalue[i] = 264;		// normal light value
 

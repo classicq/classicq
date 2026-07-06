@@ -25,34 +25,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 
 #include "quakedef.h"
 #include "gl_local.h"
 #include "gpu_local.h"
 #include "gpu_render.h"
 #include "utils.h"
-
-// TEMP M3 crash diagnostics, remove before merge
-static FILE *wdbg_file;
-void World_DebugLog(const char *msg);
-static void wdbg(const char *msg)
-{
-	if (!wdbg_file)
-		wdbg_file = fopen("gpu_world.log", "w");
-	if (wdbg_file)
-	{
-		fputs(msg, wdbg_file);
-		fputc('\n', wdbg_file);
-		fflush(wdbg_file);
-	}
-}
-#define WDBG_ONCE(msg) { static int once; if (!once) { once = 1; wdbg(msg); } }
-
-void World_DebugLog(const char *msg)
-{
-	wdbg(msg);
-}
 
 #define BLOCK_WIDTH		128
 #define BLOCK_HEIGHT	128
@@ -604,7 +582,6 @@ static void R_RenderAllDynamicLightmaps(model_t *model)
 // copy-pass hook, sends dirty page regions to the GPU
 void World_UploadLightmaps(SDL_GPUCopyPass *copy)
 {
-	WDBG_ONCE("World_UploadLightmaps: enter");
 	SDL_GPUDevice *device = GPU_GetDevice();
 	SDL_GPUTextureTransferInfo transfer;
 	SDL_GPUTextureRegion region;
@@ -1135,7 +1112,6 @@ static void SubdividePolygon(msurface_t *warpface, int numverts, float *verts)
 // Breaks a polygon up along axial 64 unit boundaries so that turbulent and sky warps can be done reasonably.
 void GL_SubdivideSurface(model_t *model, msurface_t *fa)
 {
-	WDBG_ONCE("GL_SubdivideSurface: first call");
 	vec3_t verts[64];
 	int i, lindex;
 	float *vec;
@@ -1173,13 +1149,6 @@ void GL_SubdivideSurface(model_t *model, msurface_t *fa)
 	}
 
 	SubdividePolygon(fa, fa->numedges, verts[0]);
-
-	{
-		static int subdivcount;
-		char tmp[64];
-		snprintf(tmp, sizeof(tmp), "subdiv %d done (edges %d)", ++subdivcount, fa->numedges);
-		wdbg(tmp);
-	}
 }
 
 // ---- sky ----
@@ -1279,7 +1248,6 @@ void R_LoadSky_f(void)
 //A sky texture is 256 * 128, with the right side being a masked overlay
 void R_InitSky(void *texturedata)
 {
-	wdbg("R_InitSky: enter");
 	int i, j, p, r, g, b;
 	byte *src;
 	unsigned trans[128 * 128], transpix, *rgba;
@@ -1330,7 +1298,6 @@ void R_InitSky(void *texturedata)
 	sky_initialised = 1;
 
 	R_SkyNameChanged(r_skyname.string);
-	wdbg("R_InitSky: done");
 }
 
 void R_DrawSkyChain(void)
@@ -1686,7 +1653,6 @@ void R_DrawSkyBox(void)
 
 void R_DrawBrushModel(entity_t *e)
 {
-	WDBG_ONCE("R_DrawBrushModel: enter");
 	int i, k;
 	unsigned int li;
 	unsigned int lj;
@@ -1958,7 +1924,6 @@ void R_DrawWorld(void)
 {
 	static entity_t ent;
 
-	WDBG_ONCE("R_DrawWorld: enter");
 	memset (&ent, 0, sizeof(ent));
 	ent.model = cl.worldmodel;
 
@@ -1975,28 +1940,23 @@ void R_DrawWorld(void)
 	//set up texture chains for the world
 	memset(cl.worldmodel->surfvisible, 0, ((cl.worldmodel->numsurfaces+31)/32)*sizeof(*cl.worldmodel->surfvisible));
 	R_RecursiveWorldNode(cl.worldmodel, 0, 15);
-	WDBG_ONCE("R_DrawWorld: recursion done");
 
 	//draw the world sky
 	if (r_skyboxloaded)
 		R_DrawSkyBox ();
 	else
 		R_DrawSkyChain ();
-	WDBG_ONCE("R_DrawWorld: sky done");
 
 	R_DrawEntitiesOnList (&cl_firstpassents);
 
 	//draw the world
 	R_RenderAllDynamicLightmaps(cl.worldmodel);
-	WDBG_ONCE("R_DrawWorld: dynlm done");
 	R_UpdateFlatColours(cl.worldmodel);
 	DrawTextureChains(cl.worldmodel);
-	WDBG_ONCE("R_DrawWorld: chains done");
 	R_DrawFlat(cl.worldmodel);
 
 	//draw the world alpha textures
 	R_DrawAlphaChain ();
-	WDBG_ONCE("R_DrawWorld: done");
 }
 
 void R_MarkLeaves(void)
@@ -2312,7 +2272,6 @@ void GL_BuildLightmaps(void)
 	int i, j;
 	model_t	*m;
 
-	wdbg("GL_BuildLightmaps: enter");
 	memset (allocated, 0, sizeof(allocated));
 
 	r_framecount = 1;		// no dlightcache
@@ -2355,10 +2314,8 @@ void GL_BuildLightmaps(void)
 			BuildSurfaceDisplayList(m, m->surfaces + i);
 		}
 
-		wdbg(m->name);
 		World_BuildModelBuffer(m);
 	}
-	wdbg("GL_BuildLightmaps: models done");
 
 	// create pages for the used slots, first upload sends whole pages
 	for (i = 0; i < MAX_LIGHTMAPS; i++)
@@ -2374,5 +2331,4 @@ void GL_BuildLightmaps(void)
 	}
 
 	GPU_SetSceneUploader(World_UploadLightmaps);
-	wdbg("GL_BuildLightmaps: done");
 }

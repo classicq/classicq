@@ -265,12 +265,6 @@ void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr)
 	unsigned char *backside;
 	int i;
 
-	// TEMP M3 diagnostics
-	{
-		extern void World_DebugLog(const char *msg);
-		World_DebugLog(m->name);
-	}
-
 	paliashdr = hdr;	// (aliashdr_t *)Mod_Extradata (m);
 
 #if 0

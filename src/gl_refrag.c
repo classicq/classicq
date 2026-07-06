@@ -151,17 +151,6 @@ void R_AddEfrags(entity_t *ent)
 	model_t *entmodel;
 	int i;
 
-	// TEMP M3 diagnostics
-	{
-		static int once;
-		extern void World_DebugLog(const char *msg);
-		if (!once)
-		{
-			once = 1;
-			World_DebugLog("R_AddEfrags: first call");
-		}
-	}
-
 	if (!ent->model)
 		return;
 
