@@ -24,7 +24,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "common.h"
 #ifdef GLQUAKE
 #include "gl_local.h"
-#include "gl_draw.h"
 #include "gl_texture.h"
 #else
 #include "r_shared.h"
@@ -530,11 +529,6 @@ void VID_SetDeviceGammaRamp(unsigned short *ramps)
 qboolean VID_HWGammaSupported()
 {
 	return Sys_Video_HWGammaSupported(display);
-}
-
-void *VID_GetProcAddress(const char *name)
-{
-	return Sys_Video_GetProcAddress(display, name);
 }
 #endif
 

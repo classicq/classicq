@@ -488,13 +488,6 @@ qboolean Sys_Video_HWGammaSupported(void *display)
 	return 0;
 }
 
-void *Sys_Video_GetProcAddress(void *display, const char *name)
-{
-	(void)display;
-	(void)name;
-	return NULL;
-}
-
 const char *Sys_Video_GetClipboardText(void *display)
 {
 	(void)display;

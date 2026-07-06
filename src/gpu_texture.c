@@ -305,12 +305,6 @@ void GL_Bind(int texnum)
 	currenttexture = texnum;
 }
 
-void GL_SelectTexture(GLenum target) { (void)target; }
-void GL_DisableMultitexture(void) {}
-void GL_EnableMultitexture(void) {}
-void GL_EnableTMU(GLenum target) { (void)target; }
-void GL_DisableTMU(GLenum target) { (void)target; }
-
 static void scale_dimensions(int width, int height, int *scaled_width, int *scaled_height, int mode)
 {
 	int w = width, h = height;

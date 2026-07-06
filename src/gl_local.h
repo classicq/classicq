@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -19,33 +19,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // gl_local.h -- private refresh defs
 
-// disable data conversion warnings
-
-#ifdef __APPLE__
-#if 0
-#include <AGL/agl.h>
-#endif
-
-#include <OpenGL/gl.h>
-
-#else
-#include <GL/gl.h>
-#endif
-
-#ifdef AROS
-#include <proto/mesa.h>
-#endif
-
 #include "gl_texture.h"
 #include "gl_model.h"
 
 #include "render.h"
 #include "protocol.h"
 #include "client.h"
-
-#ifndef APIENTRY
-#define APIENTRY
-#endif
 
 extern int glwidth, glheight;
 
@@ -132,33 +111,28 @@ extern	int underwatertexture, detailtexture;
 
 extern	int		lightmode;		// set to gl_lightmode on mapchange
 
-extern	const char *gl_vendor;
-extern	const char *gl_renderer;
-extern	const char *gl_version;
-extern	const char *gl_extensions;
-
-// gl_warp.c
+// gpu_world.c
 void GL_SubdivideSurface(model_t *model, msurface_t *fa);
-void EmitBothSkyLayers (msurface_t *fa);
-void EmitWaterPolys(model_t *model, msurface_t *fa);
 void EmitCausticsPolys (void);
 void R_DrawSkyChain (void);
 void R_LoadSky_f(void);
 void R_DrawSkyBox (void);
 extern qboolean	r_skyboxloaded;
 
-// gl_draw.c
+// gpu_draw2d.c
 void GL_Set2D (void);
 void Draw_SizeChanged(void);
+void R_NetGraph (void);
 
-// gl_rmain.c
+// gpu_rmain.c
 qboolean R_CullBox (vec3_t mins, vec3_t maxs);
 qboolean R_CullSphere (vec3_t centre, float radius);
 void R_PolyBlend (void);
 void R_BrightenScreen (void);
 void R_DrawEntitiesOnList (visentlist_t *vislist);
+void R_InitOtherTextures(void);
 
-// gl_rlight.c
+// gpu_rmain.c dlights
 void R_MarkLights(model_t *model, dlight_t *light, int bit, unsigned int nodenum);
 void R_AnimateLight (void);
 void R_RenderDlights (void);
@@ -170,157 +144,15 @@ void R_StoreEfrags (efrag_t **ppefrag);
 // gl_mesh.c
 void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr);
 
-// gl_rsurf.c
+// gpu_world.c world drawing
 void R_DrawBrushModel (entity_t *e);
 void R_DrawWorld (void);
 void R_DrawWaterSurfaces (void);
 void GL_BuildLightmaps (void);
 
-// gl_ngraph.c
-void R_NetGraph (void);
+extern qboolean gl_fbo;
 
-// gl_rmisc.c
-void R_InitOtherTextures(void);
-
-//vid_common_gl.c
-
-//texture compression
-#define GL_COMPRESSED_ALPHA_ARB					0x84E9
-#define GL_COMPRESSED_LUMINANCE_ARB				0x84EA
-#define GL_COMPRESSED_LUMINANCE_ALPHA_ARB		0x84EB
-#define GL_COMPRESSED_INTENSITY_ARB				0x84EC
-#define GL_COMPRESSED_RGB_ARB					0x84ED
-#define GL_COMPRESSED_RGBA_ARB					0x84EE
-#define GL_TEXTURE_COMPRESSION_HINT_ARB			0x84EF
-#define GL_TEXTURE_IMAGE_SIZE_ARB				0x86A0
-#define GL_TEXTURE_COMPRESSED_ARB				0x86A1
-#define GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB	0x86A2
-#define GL_COMPRESSED_TEXTURE_FORMATS_ARB		0x86A3
-
-//combine extension
-#define GL_COMBINE_EXT				0x8570
-#define GL_COMBINE_RGB_EXT			0x8571
-#define GL_RGB_SCALE_EXT			0x8573
-
-/* GL_ARB_vertex_buffer_object */
-#define GL_ARRAY_BUFFER_ARB                             0x8892
-#define GL_STATIC_DRAW_ARB                              0x88E4
-
-#ifdef _WIN32
-#define GL_CLAMP_TO_EDGE 0x812F
-
-#define GL_MAX_TEXTURE_UNITS 0x84E2
-#define GL_TEXTURE0 0x84C0
-#define GL_TEXTURE1 0x84C1
-#define GL_TEXTURE2 0x84C2
-#define GL_ACTIVE_TEXTURE 0x84E0
-#endif
-
-#ifdef __MORPHOS__
-#define GL_MAX_TEXTURE_UNITS GL_MAX_TEXTURE_UNITS_ARB
-
-#define glMultiTexCoord2f glMultiTexCoord2fARB
-#define glClientActiveTexture glClientActiveTextureARB
-#define glActiveTexture glActiveTextureARB
-#endif
-
-#ifdef _WIN32
-void glMultiTexCoord2f(GLenum target, GLfloat s, GLfloat t);
-void glDrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices);
-void glClientActiveTexture(GLenum texture);
-void glActiveTexture(GLenum texture);
-#endif
-
-#if !defined(GL_VERSION_1_5) && !defined(__MORPHOS__)
-typedef ptrdiff_t GLintptrARB;
-typedef ptrdiff_t GLsizeiptrARB;
-#endif
-
-extern void (APIENTRY *qglBindBufferARB)(GLenum, GLuint);
-extern void (APIENTRY *qglBufferDataARB)(GLenum, GLsizeiptrARB, const GLvoid *, GLenum);
-extern void (APIENTRY *qglBufferSubDataARB)(GLenum, GLintptrARB, GLsizeiptrARB, const GLvoid *);
-
-/* GLSL stuff */
-#define GL_FRAGMENT_SHADER 0x8B30
-#define GL_VERTEX_SHADER 0x8B31
-#define GL_COMPILE_STATUS 0x8B81
-#define GL_LINK_STATUS 0x8B82
-#define GL_INFO_LOG_LENGTH 0x8B84
-
-#if !defined(GL_VERSION_2_0) && !defined(__MORPHOS__)
-typedef char GLchar;
-#endif
-
-extern void (APIENTRY *qglAttachShader)(GLuint program, GLuint shader);
-extern void (APIENTRY *qglCompileShader)(GLuint shader);
-extern GLuint (APIENTRY *qglCreateProgram)(void);
-extern GLuint (APIENTRY *qglCreateShader)(GLenum shaderType);
-extern void (APIENTRY *qglDeleteProgram)(GLuint program);
-extern void (APIENTRY *qglDeleteShader)(GLuint shader);
-extern void (APIENTRY *qglGetProgramInfoLog)(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-extern void (APIENTRY *qglGetProgramiv)(GLuint program,  GLenum pname, GLint *params);
-extern void (APIENTRY *qglGetShaderInfoLog)(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-extern void (APIENTRY *qglGetShaderiv)(GLuint shader,  GLenum pname, GLint *params);
-extern GLint (APIENTRY *qglGetUniformLocation)(GLuint program, const GLchar *name);
-extern void (APIENTRY *qglLinkProgram)(GLuint program);
-extern void (APIENTRY *qglShaderSource)(GLuint shader, GLsizei count, const GLchar **string, const GLint *length);
-extern void (APIENTRY *qglUniform1f)(GLint location, GLfloat v0);
-extern void (APIENTRY *qglUniform1i)(GLint location, GLint v0);
-extern void (APIENTRY *qglUniform4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
-extern void (APIENTRY *qglUniformMatrix4fv)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-extern void (APIENTRY *qglUseProgram)(GLuint program);
-
-extern void (APIENTRY *qglBindAttribLocation)(GLuint program, GLuint index, const GLchar *name);
-extern void (APIENTRY *qglDisableVertexAttribArray)(GLuint index);
-extern void (APIENTRY *qglEnableVertexAttribArray)(GLuint index);
-extern void (APIENTRY *qglVertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
-
-/* FBO stuff */
-#ifndef GL_FRAMEBUFFER
-#define GL_FRAMEBUFFER 0x8D40
-#endif
-#ifndef GL_READ_FRAMEBUFFER
-#define GL_READ_FRAMEBUFFER 0x8CA8
-#endif
-#ifndef GL_RENDERBUFFER
-#define GL_RENDERBUFFER 0x8D41
-#endif
-#ifndef GL_FRAMEBUFFER_COMPLETE
-#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
-#endif
-#ifndef GL_COLOR_ATTACHMENT0
-#define GL_COLOR_ATTACHMENT0 0x8CE0
-#endif
-#ifndef GL_DEPTH_ATTACHMENT
-#define GL_DEPTH_ATTACHMENT 0x8D00
-#endif
-#ifndef GL_DEPTH_COMPONENT24
-#define GL_DEPTH_COMPONENT24 0x81A6
-#endif
-
-extern void (APIENTRY *qglGenFramebuffers)(GLsizei n, GLuint *framebuffers);
-extern void (APIENTRY *qglDeleteFramebuffers)(GLsizei n, const GLuint *framebuffers);
-extern void (APIENTRY *qglBindFramebuffer)(GLenum target, GLuint framebuffer);
-extern void (APIENTRY *qglFramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-extern void (APIENTRY *qglFramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
-extern GLenum (APIENTRY *qglCheckFramebufferStatus)(GLenum target);
-extern void (APIENTRY *qglGenRenderbuffers)(GLsizei n, GLuint *renderbuffers);
-extern void (APIENTRY *qglDeleteRenderbuffers)(GLsizei n, const GLuint *renderbuffers);
-extern void (APIENTRY *qglBindRenderbuffer)(GLenum target, GLuint renderbuffer);
-extern void (APIENTRY *qglRenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
-
-
-extern float gldepthmin, gldepthmax;
-extern byte color_white[4], color_black[4];
-extern qboolean gl_mtexable;
-extern int gl_textureunits;
-extern qboolean gl_combine, gl_add_ext, gl_npot, gl_vbo, gl_vs, gl_fs, gl_fbo;
-
-extern int vbo_number;
-
-qboolean CheckExtension (const char *extension);
 void Check_Gamma (unsigned char *pal);
 void VID_SetPalette (unsigned char *palette);
 void GL_CvarInit(void);
 void GL_Init (void);
-

@@ -60,12 +60,6 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Install Linux system dependencies
-        if: matrix.target == 'x86_64-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev
-
       - name: Build release binary
         shell: bash
         run: |

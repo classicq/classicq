@@ -20,12 +20,9 @@ With those in hand, grab the classicQ binary from [the releases page](https://gi
 
 Binary lands in `assets/` next to the configs. Run from there.
 
-SDL3 is built from source as part of the build. On Linux you still need OpenGL dev headers:
+SDL3 is built from source as part of the build. No system dev packages needed, on any platform.
 
-- Ubuntu: `sudo apt install libgl1-mesa-dev`
-- Fedora: `sudo dnf install mesa-libGL-devel`
-- Arch: `sudo pacman -S mesa`
-- openSUSE: `sudo zypper install Mesa-libGL-devel`
+Rendering runs on SDL_GPU: Vulkan or Direct3D 12 on Windows, Vulkan on Linux, Metal on macOS.
 
 ## Credits
 

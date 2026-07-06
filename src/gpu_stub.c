@@ -29,7 +29,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gl_skinimp.h"
 #include "gl_framebuffer.h"
 #include "gl_post_process.h"
-#include "gl_state.h"
 #include "particles.h"
 #include "gpu_local.h"
 
@@ -125,30 +124,16 @@ int underwatertexture, detailtexture;
 
 int texture_extension_number = 1;
 int currenttexture = -1;
-int vbo_number = 1;
-int gl_lightmap_format, gl_solid_format = 3, gl_alpha_format = 4;
 int gl_max_size_default = 2048;
 int gl_filter_max;
 
-const char *gl_vendor = "classicQ", *gl_renderer = "SDL_GPU";
-const char *gl_version = "3", *gl_extensions = "";
-
-float gldepthmin, gldepthmax;
-byte color_white[4] = {255, 255, 255, 255}, color_black[4] = {0, 0, 0, 255};
-qboolean gl_mtexable = true;
-int gl_textureunits = 4;
-qboolean gl_combine, gl_add_ext, gl_npot = true, gl_vbo = false;
-qboolean gl_vs, gl_fs, gl_fbo = true;
+qboolean gl_fbo = true;
 
 unsigned d_8to24table[256];
 unsigned d_8to24table2[256];
 unsigned short d_8to16table[256];
 float vid_gamma = 1.0f;
 byte vid_gamma_table[256];
-
-void (APIENTRY *qglBindBufferARB)(GLenum, GLuint);
-void (APIENTRY *qglBufferDataARB)(GLenum, GLsizeiptrARB, const GLvoid *, GLenum);
-void (APIENTRY *qglBufferSubDataARB)(GLenum, GLintptrARB, GLsizeiptrARB, const GLvoid *);
 
 // ---- palette (real, engine reads these tables) ----
 

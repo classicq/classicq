@@ -40,13 +40,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 void GL_Bind (int texnum);
 
 
-void GL_SelectTexture (GLenum target);
-void GL_DisableMultitexture(void);
-void GL_EnableMultitexture(void);
-void GL_EnableTMU (GLenum target);
-void GL_DisableTMU(GLenum target);
-
-
 void GL_Upload8 (byte *data, int width, int height, int mode);
 void GL_Upload32 (unsigned *data, int width, int height, int mode);
 int GL_LoadTexture (char *identifier, int width, int height, byte *data, int mode, int bpp);
@@ -61,8 +54,6 @@ void GL_Texture_CvarInit(void);
 void GL_Texture_Init(void);
 void GL_Texture_Shutdown(void);
 
-
-extern int gl_lightmap_format, gl_solid_format, gl_alpha_format;
 
 extern cvar_t gl_max_size, gl_scaleModelTextures, gl_scaleTurbTextures, gl_miptexLevel;
 extern cvar_t gl_externalTextures_world, gl_externalTextures_bmodels;

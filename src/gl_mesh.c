@@ -188,71 +188,6 @@ static int MakeTextureCoordinates(aliashdr_t *hdr, unsigned char *backside)
 	return 0;
 }
 
-static int MakeVBO(aliashdr_t *hdr)
-{
-	int *vertposes;
-	float *vboverts;
-	int pose;
-	int vert;
-	int i;
-	unsigned int totalverts;
-
-	if (!gl_vbo)
-		return 1;
-
-	totalverts = hdr->totalverts;
-
-	vboverts = malloc(hdr->numposes * totalverts * 3 * sizeof(*vboverts));
-	vertposes = malloc(hdr->numposes*sizeof(*vertposes));
-
-	if (vboverts && vertposes)
-	{
-		for(pose=0;pose<hdr->numposes;pose++)
-		{
-			for(vert=0;vert<hdr->numverts;vert++)
-			{
-				vboverts[pose*totalverts*3 + vert*3 + 0] = poseverts[pose][vert].v[0];
-				vboverts[pose*totalverts*3 + vert*3 + 1] = poseverts[pose][vert].v[1];
-				vboverts[pose*totalverts*3 + vert*3 + 2] = poseverts[pose][vert].v[2];
-			}
-
-			for(;vert<totalverts;vert++)
-			{
-				vboverts[pose*totalverts*3 + vert*3 + 0] = poseverts[pose][hdr->collisionmap[vert-hdr->numverts]].v[0];
-				vboverts[pose*totalverts*3 + vert*3 + 1] = poseverts[pose][hdr->collisionmap[vert-hdr->numverts]].v[1];
-				vboverts[pose*totalverts*3 + vert*3 + 2] = poseverts[pose][hdr->collisionmap[vert-hdr->numverts]].v[2];
-			}
-		}
-
-		hdr->vert_vbo_number = vertposes;
-		vertposes = 0;
-
-		for(i=0;i<hdr->numposes;i++)
-		{
-			hdr->vert_vbo_number[i] = vbo_number++;
-
-			qglBindBufferARB(GL_ARRAY_BUFFER_ARB, hdr->vert_vbo_number[i]);
-			qglBufferDataARB(GL_ARRAY_BUFFER_ARB, totalverts*3*sizeof(*vboverts), vboverts + totalverts*3*i, GL_STATIC_DRAW_ARB);
-		}
-
-		hdr->texcoord_vbo_number = vbo_number++;
-
-		qglBindBufferARB(GL_ARRAY_BUFFER_ARB, hdr->texcoord_vbo_number);
-		qglBufferDataARB(GL_ARRAY_BUFFER_ARB, totalverts*2*sizeof(*hdr->texcoords), hdr->texcoords, GL_STATIC_DRAW_ARB);
-
-		qglBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
-
-		free(vboverts);
-
-		return 1;
-	}
-
-	free(vertposes);
-	free(vboverts);
-
-	return 0;
-}
-
 /*
 ================
 GL_MakeAliasModelDisplayLists
@@ -281,9 +216,6 @@ void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr)
 
 	if (!MakeTextureCoordinates(hdr, backside))
 		Sys_Error("GL_MakeAliasModelDisplayLists: MakeTextureCoordinates() failed.");
-
-	if (!MakeVBO(hdr))
-		Sys_Error("GL_MakeAliasModelDisplayLists: MakeVBO() failed.");
 
 	free(collisionrevmap);
 	free(backside);

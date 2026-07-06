@@ -33,6 +33,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gpu_local.h"
 #include "gpu_render.h"
 
+// GL blend factor values, kept as opaque type tags in the QMB tables
+#define GL_ZERO 0
+#define GL_ONE 1
+#define GL_ONE_MINUS_SRC_COLOR 0x0301
+#define GL_SRC_ALPHA 0x0302
+#define GL_ONE_MINUS_SRC_ALPHA 0x0303
+
 extern int r_dlightframecount;
 
 // ---- run batcher, merges contiguous (pipe, texture) emits into one batch ----
