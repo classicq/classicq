@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // 3D frame setup for the SDL_GPU renderer; records scene work, no GPU calls here
 
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
