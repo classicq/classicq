@@ -68,7 +68,7 @@ cvar_t	gl_fb_bmodels = {"gl_fb_bmodels", "1"};
 cvar_t	gl_fb_models = {"gl_fb_models", "1"};
 cvar_t	gl_lightmode = {"gl_lightmode", "1"};
 cvar_t	gl_loadlitfiles = {"gl_loadlitfiles", "1"};
-cvar_t	r_skyname = {"r_skyname", "purple_chaos"};
+extern cvar_t r_skyname;	// gpu_world.c, has the skybox OnChange
 cvar_t	gl_water_program = {"gl_water_program", "1"};
 cvar_t	gl_part_explosions = {"gl_part_explosions", "1"};
 cvar_t	gl_part_trails = {"gl_part_trails", "0"};
@@ -239,6 +239,9 @@ void R_CvarInit(void)
 		Cvar_Register(stub_cvars[i]);
 
 	GL_Particles_CvarInit();
+
+	Cmd_AddCommand("loadsky", R_LoadSky_f);
+	Cmd_AddCommand("timerefresh", R_TimeRefresh_f);
 }
 
 void R_InitEfrags(void) {}
@@ -248,7 +251,6 @@ void GL_Init(void) {}
 // ---- frame ----
 
 void GL_Set2D(void) {}
-void R_NetGraph(void) {}
 
 // ---- loader hooks (gl_model.c stays compiled) ----
 
@@ -330,5 +332,3 @@ void Draw_SetSize(unsigned int width, unsigned int height)
 }
 
 // ---- misc gl-side entry points still referenced ----
-
-void R_InitOtherTextures(void) {}

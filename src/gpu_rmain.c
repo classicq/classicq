@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "gl_local.h"
 #include "sound.h"
+#include "screen.h"
+#include "ruleset.h"
 #include "gpu_local.h"
 #include "gpu_render.h"
 
@@ -670,6 +672,33 @@ int R_Init(void)
 void R_InitGL(void)
 {
 	Classic_LoadParticleTextures();
+	R_InitOtherTextures();
+}
+
+void R_TimeRefresh_f(void)
+{
+	int i;
+	float start, stop, time;
+
+	if (cls.state != ca_active)
+		return;
+
+	if (!(cl.spectator || cls.demoplayback || cl.standby) && !Ruleset_AllowTimeRefresh())
+	{
+		Com_Printf("Timerefresh's disabled during match\n");
+		return;
+	}
+
+	start = Sys_DoubleTime();
+	for (i = 0; i < 128; i++)
+	{
+		r_refdef.viewangles[1] = i * (360.0 / 128.0);
+		SCR_UpdateScreen();
+	}
+
+	stop = Sys_DoubleTime();
+	time = stop - start;
+	Com_Printf("%f seconds (%f fps)\n", time, 128 / time);
 }
 
 void R_Shutdown(void)

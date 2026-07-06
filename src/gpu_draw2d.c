@@ -1124,3 +1124,84 @@ void Draw_DrawSubPicture(struct Picture *picture, float sx, float sy, float swid
 		(sx + swidth) * picture->glwidthscale, (sy + sheight) * picture->glheightscale,
 		colour_white);
 }
+
+// ---- netgraph, ported from gl_ngraph.c ----
+
+extern int netgraphtexture;
+
+#define NET_GRAPHHEIGHT 32
+
+static byte ngraph_texels[NET_GRAPHHEIGHT][NET_TIMINGS];
+
+static void R_LineGraph(int x, int h)
+{
+	int i, s, color;
+
+	s = NET_GRAPHHEIGHT;
+
+	if (h == 10000)
+		color = 0x6f;   // yellow
+	else if (h == 9999)
+		color = 0x4f;   // red
+	else if (h == 9998)
+		color = 0xd0;   // blue
+	else
+		color = 0xfe;   // white
+
+	h = min(h, s);
+
+	for (i = 0; i < h; i++)
+	{
+		if (i & 1)
+			ngraph_texels[NET_GRAPHHEIGHT - i - 1][x] = 0xff;
+		else
+			ngraph_texels[NET_GRAPHHEIGHT - i - 1][x] = (byte)color;
+	}
+
+	for ( ; i < s; i++)
+		ngraph_texels[NET_GRAPHHEIGHT - i - 1][x] = (byte)0xff;
+}
+
+void R_NetGraph(void)
+{
+	int a, x, i, y, lost;
+	char st[80];
+	static unsigned ngraph_pixels[NET_GRAPHHEIGHT][NET_TIMINGS];
+
+	x = 0;
+	lost = CL_CalcNet();
+	for (a = 0; a < NET_TIMINGS; a++)
+	{
+		i = (cls.netchan.outgoing_sequence - a) & NET_TIMINGSMASK;
+		R_LineGraph(NET_TIMINGS - 1 - a, packet_latency[i]);
+	}
+
+	for (y = 0; y < NET_GRAPHHEIGHT; y++)
+		for (x = 0; x < NET_TIMINGS; x++)
+			ngraph_pixels[y][x] = d_8to24table[ngraph_texels[y][x]];
+
+	x = 0;
+	y = vid.conheight - sb_lines - 24 - NET_GRAPHHEIGHT - 1;
+
+	if (r_netgraph.value != 2 && r_netgraph.value != 3)
+		Draw_TextBox(x, y, NET_TIMINGS / 8, NET_GRAPHHEIGHT / 8 + 1);
+
+	if (r_netgraph.value != 3)
+	{
+		sprintf(st, "%3i%% packet loss", lost);
+		Draw_String(8, y + 8, st);
+	}
+
+	x = 8;
+	y += 16;
+
+	if (!netgraphtexture)
+		netgraphtexture = texture_extension_number++;
+
+	GPU_UpdateTextureRGBA(netgraphtexture, (const unsigned char *)ngraph_pixels,
+		NET_TIMINGS, NET_GRAPHHEIGHT, GPU_TEXPREF_LINEAR);
+
+	Draw2D_Quad(netgraphtexture, 0,
+		x, y, x + NET_TIMINGS, y + NET_GRAPHHEIGHT,
+		0, 0, 1, 1, colour_white);
+}

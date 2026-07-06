@@ -700,6 +700,139 @@ static void R_RenderLumas(void)
 	drawlumas = false;
 }
 
+// ---- caustics and detail decal passes ----
+
+static glpoly_t *caustics_polys;
+static glpoly_t *detail_polys;
+
+#define TURBSINSIZE 128
+#define TURBSCALE ((float) TURBSINSIZE / (2 * M_PI))
+
+static const byte turbsin[TURBSINSIZE] =
+{
+	127, 133, 139, 146, 152, 158, 164, 170, 176, 182, 187, 193, 198, 203, 208, 213,
+		217, 221, 226, 229, 233, 236, 239, 242, 245, 247, 249, 251, 252, 253, 254, 254,
+		255, 254, 254, 253, 252, 251, 249, 247, 245, 242, 239, 236, 233, 229, 226, 221,
+		217, 213, 208, 203, 198, 193, 187, 182, 176, 170, 164, 158, 152, 146, 139, 133,
+		127, 121, 115, 108, 102, 96, 90, 84, 78, 72, 67, 61, 56, 51, 46, 41,
+		37, 33, 28, 25, 21, 18, 15, 12, 9, 7, 5, 3, 2, 1, 0, 0,
+		0, 0, 0, 1, 2, 3, 5, 7, 9, 12, 15, 18, 21, 25, 28, 33,
+		37, 41, 46, 51, 56, 61, 67, 72, 78, 84, 90, 96, 102, 108, 115, 121,
+};
+
+__inline static float SINTABLE_APPROX(float time)
+{
+	float sinlerpf, lerptime, lerp;
+	int sinlerp1, sinlerp2;
+
+	sinlerpf = time * TURBSCALE;
+	sinlerp1 = floor(sinlerpf);
+	sinlerp2 = sinlerp1 + 1;
+	lerptime = sinlerpf - sinlerp1;
+
+	lerp =	turbsin[sinlerp1 & (TURBSINSIZE - 1)] * (1 - lerptime) +
+		turbsin[sinlerp2 & (TURBSINSIZE - 1)] * lerptime;
+	return -8 + 16 * lerp / 255.0;
+}
+
+static void CalcCausticTexCoords(float *v, float *s, float *t)
+{
+	float os, ot;
+
+	os = v[3];
+	ot = v[4];
+
+	*s = os + SINTABLE_APPROX(0.465 * (cl.time + ot));
+	*s *= -3 * (0.5 / 64);
+
+	*t = ot + SINTABLE_APPROX(0.465 * (cl.time + os));
+	*t *= -3 * (0.5 / 64);
+}
+
+// emits one decal batch over the chained polys with per-frame CPU texcoords
+static void EmitDecalPolys(glpoly_t *chain, int is_caustics, int texnum)
+{
+	glpoly_t *p;
+	scene_vert_t *out;
+	unsigned int *idx;
+	unsigned int firstvert, firstindex, batchfirst = 0, total = 0;
+	int i, j;
+	float *v, s, t;
+
+	for (p = chain; p; p = is_caustics ? p->caustics_chain : p->detail_chain)
+	{
+		if (p->numverts < 3)
+			continue;
+
+		out = Scene_AllocVerts(p->numverts, &firstvert);
+		idx = Scene_AllocIndices((p->numverts - 2) * 3, &firstindex);
+		if (!out || !idx)
+			break;
+
+		for (i = 0, v = p->verts[0]; i < p->numverts; i++, v += VERTEXSIZE)
+		{
+			if (is_caustics)
+			{
+				CalcCausticTexCoords(v, &s, &t);
+			}
+			else
+			{
+				s = v[7] * 18;
+				t = v[8] * 18;
+			}
+
+			out[i].pos[0] = v[0];
+			out[i].pos[1] = v[1];
+			out[i].pos[2] = v[2];
+			out[i].st[0] = s;
+			out[i].st[1] = t;
+			out[i].lm[0] = 0;
+			out[i].lm[1] = 0;
+			out[i].rgba[0] = 255;
+			out[i].rgba[1] = 255;
+			out[i].rgba[2] = 255;
+			out[i].rgba[3] = 255;
+		}
+
+		for (j = 0; j < p->numverts - 2; j++)
+		{
+			idx[j * 3 + 0] = firstvert;
+			idx[j * 3 + 1] = firstvert + j + 1;
+			idx[j * 3 + 2] = firstvert + j + 2;
+		}
+
+		if (!total)
+			batchfirst = firstindex;
+		total += (p->numverts - 2) * 3;
+	}
+
+	if (total)
+		Scene_AddBatch(SCENE_PIPE_MOD_NODEPTHWRITE, texnum, NULL,
+			GPU_GetDynamicSceneVB(), batchfirst, total, current_mvp);
+}
+
+void EmitCausticsPolys(void)
+{
+	if (underwatertexture && caustics_polys)
+		EmitDecalPolys(caustics_polys, 1, underwatertexture);
+	caustics_polys = NULL;
+}
+
+static void EmitDetailPolys(void)
+{
+	if (detailtexture && detail_polys)
+		EmitDecalPolys(detail_polys, 0, detailtexture);
+	detail_polys = NULL;
+}
+
+void R_InitOtherTextures(void)
+{
+	static const int flags = TEX_MIPMAP | TEX_ALPHA | TEX_COMPLAIN;
+
+	underwatertexture = GL_LoadTextureImage ("textures/water_caustic", NULL, 0, 0,  flags );
+	detailtexture = GL_LoadTextureImage("textures/detail", NULL, 256, 256, flags);
+}
+
 // ---- texture chains ----
 
 #define CHAIN_RESET(chain)			\
@@ -747,11 +880,13 @@ static void DrawTextureChains(model_t *model)
 	int waterline, i;
 	msurface_t *s;
 	texture_t *t;
-	qboolean drawLumasGlowing, draw_fbs;
+	qboolean drawLumasGlowing, draw_fbs, draw_caustics, draw_details;
 	unsigned int runfirst, runcount, firstindex, n;
 	int runpage;
 
 	drawLumasGlowing = (com_serveractive || cl.allow_lumas) && gl_fb_bmodels.value;
+	draw_caustics = underwatertexture && gl_caustics.value;
+	draw_details = detailtexture && gl_detail.value;
 
 	if (!current_vb)
 		return;
@@ -794,7 +929,16 @@ static void DrawTextureChains(model_t *model)
 					runcount += n;
 				}
 
-				// TODO: caustics and detail texture passes not ported
+				if (waterline && draw_caustics)
+				{
+					s->polys->caustics_chain = caustics_polys;
+					caustics_polys = s->polys;
+				}
+				if (!waterline && draw_details)
+				{
+					s->polys->detail_chain = detail_polys;
+					detail_polys = s->polys;
+				}
 
 				if (t->fb_texturenum > 0 && t->fb_texturenum < MAX_GLTEXTURES && draw_fbs)
 				{
@@ -855,6 +999,9 @@ static void DrawTextureChains(model_t *model)
 		R_RenderLumas();
 		R_RenderFullbrights();
 	}
+
+	EmitCausticsPolys();
+	EmitDetailPolys();
 }
 
 static void R_UpdateFlatColours(model_t *model)
@@ -1208,7 +1355,6 @@ cleanup:
 	return error;
 }
 
-// TODO: r_skyname OnChange wiring, the cvar is defined without a handler in gpu_stub.c
 static void R_SkyNameChanged(char *skyname)
 {
 	if (!sky_initialised)
@@ -1222,6 +1368,22 @@ static void R_SkyNameChanged(char *skyname)
 
 	R_SetSky(skyname);
 }
+
+static qboolean OnChange_r_skyname(cvar_t *v, char *skyname)
+{
+	if (!sky_initialised)
+		return false;
+
+	if (!skyname[0])
+	{
+		r_skyboxloaded = false;
+		return false;
+	}
+
+	return R_SetSky(skyname);
+}
+
+cvar_t r_skyname = { "r_skyname", "purple_chaos", 0, OnChange_r_skyname };
 
 void R_LoadSky_f(void)
 {
@@ -1238,7 +1400,6 @@ void R_LoadSky_f(void)
 				Cvar_Set(&r_skyname, "");
 			else
 				Cvar_Set(&r_skyname, Cmd_Argv(1));
-			R_SkyNameChanged(r_skyname.string);
 			break;
 		default:
 			Com_Printf("Usage: %s <skybox>\n", Cmd_Argv(0));
@@ -2126,6 +2287,14 @@ static void BuildSurfaceDisplayList(model_t *model, msurface_t *fa)
 
 		poly->verts[i][5] = s;
 		poly->verts[i][6] = t;
+
+		// detail texture coordinates
+		s = DotProduct (vec, fa->texinfo->vecs[0]) + fa->texinfo->vecs[0][3];
+		s /= 128;
+		t = DotProduct (vec, fa->texinfo->vecs[1]) + fa->texinfo->vecs[1][3];
+		t /= 128;
+		poly->verts[i][7] = s;
+		poly->verts[i][8] = t;
 	}
 }
 

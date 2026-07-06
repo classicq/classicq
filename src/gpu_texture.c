@@ -193,6 +193,71 @@ void GPU_Texture_SetPrefs(int texnum, int prefs)
 		textable[texnum].prefs = prefs;
 }
 
+void GPU_UpdateTextureRGBA(int texnum, const unsigned char *rgba, unsigned int width, unsigned int height, int prefs)
+{
+	SDL_GPUDevice *device = GPU_GetDevice();
+	struct texentry *e;
+	SDL_GPUTransferBufferCreateInfo tci;
+	SDL_GPUTransferBuffer *tbuf;
+	SDL_GPUCommandBuffer *cmdbuf;
+	SDL_GPUCopyPass *copy;
+	SDL_GPUTextureTransferInfo transfer;
+	SDL_GPUTextureRegion region;
+	void *mapped;
+
+	if (!device || texnum < 0 || texnum >= MAX_GPUTEXTURES)
+		return;
+
+	e = &textable[texnum];
+	if (!e->tex || e->width != width || e->height != height)
+	{
+		GPU_Texture_Set(texnum, GPU_CreateTextureRGBA(rgba, width, height, 0), width, height, prefs);
+		return;
+	}
+
+	e->prefs = prefs;
+
+	memset(&tci, 0, sizeof(tci));
+	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	tci.size = width * height * 4;
+	tbuf = SDL_CreateGPUTransferBuffer(device, &tci);
+	if (!tbuf)
+		return;
+
+	mapped = SDL_MapGPUTransferBuffer(device, tbuf, false);
+	if (!mapped)
+	{
+		SDL_ReleaseGPUTransferBuffer(device, tbuf);
+		return;
+	}
+	memcpy(mapped, rgba, width * height * 4);
+	SDL_UnmapGPUTransferBuffer(device, tbuf);
+
+	cmdbuf = SDL_AcquireGPUCommandBuffer(device);
+	if (!cmdbuf)
+	{
+		SDL_ReleaseGPUTransferBuffer(device, tbuf);
+		return;
+	}
+
+	copy = SDL_BeginGPUCopyPass(cmdbuf);
+
+	memset(&transfer, 0, sizeof(transfer));
+	transfer.transfer_buffer = tbuf;
+
+	memset(&region, 0, sizeof(region));
+	region.texture = e->tex;
+	region.w = width;
+	region.h = height;
+	region.d = 1;
+
+	// cycle avoids stalling on the previous frame still sampling it
+	SDL_UploadToGPUTexture(copy, &transfer, &region, true);
+	SDL_EndGPUCopyPass(copy);
+	SDL_SubmitGPUCommandBuffer(cmdbuf);
+	SDL_ReleaseGPUTransferBuffer(device, tbuf);
+}
+
 SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs)
 {
 	if (texnum < 0 || texnum >= MAX_GPUTEXTURES || !textable[texnum].tex)

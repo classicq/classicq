@@ -197,7 +197,7 @@ static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUSha
 	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
 }
 
-enum { SCENE_BLEND_NONE, SCENE_BLEND_ADD, SCENE_BLEND_ALPHA, SCENE_BLEND_ADDALPHA, SCENE_BLEND_INVSRCCOLOR };
+enum { SCENE_BLEND_NONE, SCENE_BLEND_ADD, SCENE_BLEND_ALPHA, SCENE_BLEND_ADDALPHA, SCENE_BLEND_INVSRCCOLOR, SCENE_BLEND_MOD };
 
 static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs,
 	int blend_mode, int depth_write, int color_write)
@@ -270,6 +270,17 @@ static SDL_GPUGraphicsPipeline *make_scene_pipeline(SDL_GPUShader *vs, SDL_GPUSh
 		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
 		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 	}
+	else if (blend_mode == SCENE_BLEND_MOD)
+	{
+		// dst*src*2, caustics and detail decals
+		ct.blend_state.enable_blend = true;
+		ct.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+		ct.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_DST_COLOR;
+		ct.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_COLOR;
+		ct.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+		ct.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+	}
 	if (!color_write)
 		ct.blend_state.enable_color_write_mask = true;	// mask defaults to 0
 
@@ -315,7 +326,7 @@ static int create_pipelines(void)
 {
 	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
 	SDL_GPUShader *world_vs, *world_fs, *world_at_fs, *scene_fs, *scene_at_fs;
-	SDL_GPUShader *sky_vs, *sky_fs, *water_fs, *alias_fb_fs;
+	SDL_GPUShader *sky_vs, *sky_fs, *water_fs, *alias_fb_fs, *mod_fs;
 	int i, ok;
 
 	ui_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(ui_vert), 0, 1);
@@ -332,10 +343,11 @@ static int create_pipelines(void)
 	sky_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(sky_frag), 2, 0);
 	water_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(water_frag), 1, 1);
 	alias_fb_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(alias_fb_frag), 2, 0);
+	mod_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(mod_frag), 1, 0);
 
 	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs
 		|| !world_vs || !world_fs || !world_at_fs || !scene_fs || !scene_at_fs
-		|| !sky_vs || !sky_fs || !water_fs || !alias_fb_fs)
+		|| !sky_vs || !sky_fs || !water_fs || !alias_fb_fs || !mod_fs)
 	{
 		Com_Printf("GPU: shader creation failed: %s\n", SDL_GetError());
 		return 0;
@@ -359,6 +371,7 @@ static int create_pipelines(void)
 	pipe_scene[SCENE_PIPE_TEX_BLEND_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ALPHA, 0, 1);
 	pipe_scene[SCENE_PIPE_ADDALPHA_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_ADDALPHA, 0, 1);
 	pipe_scene[SCENE_PIPE_INVSRCCOLOR_NODEPTHWRITE] = make_scene_pipeline(world_vs, scene_fs, SCENE_BLEND_INVSRCCOLOR, 0, 1);
+	pipe_scene[SCENE_PIPE_MOD_NODEPTHWRITE] = make_scene_pipeline(world_vs, mod_fs, SCENE_BLEND_MOD, 0, 1);
 
 	SDL_ReleaseGPUShader(gpu_device, ui_vs);
 	SDL_ReleaseGPUShader(gpu_device, ui_fs);
@@ -374,6 +387,7 @@ static int create_pipelines(void)
 	SDL_ReleaseGPUShader(gpu_device, sky_fs);
 	SDL_ReleaseGPUShader(gpu_device, water_fs);
 	SDL_ReleaseGPUShader(gpu_device, alias_fb_fs);
+	SDL_ReleaseGPUShader(gpu_device, mod_fs);
 
 	ok = pipe_ui && pipe_ui_alphatest && pipe_post;
 	if (!ok)

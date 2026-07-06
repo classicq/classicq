@@ -56,6 +56,8 @@ void GPU_Texture_SetPrefs(int texnum, int prefs);
 SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs);
 int GPU_Texture_White(void);
 SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int width, unsigned int height, int mipmap);
+// per-frame refresh (netgraph); reuses the texture when dimensions match
+void GPU_UpdateTextureRGBA(int texnum, const unsigned char *rgba, unsigned int width, unsigned int height, int prefs);
 
 // ---- 3D scene (recorded during R_RenderView, executed in GPU_EndFrame) ----
 
@@ -83,6 +85,7 @@ enum
 	SCENE_PIPE_TEX_BLEND_NODEPTHWRITE,      // QMB lavasplash/blood3/bubble
 	SCENE_PIPE_ADDALPHA_NODEPTHWRITE,       // QMB sparks/fire/smoke, srcalpha/one
 	SCENE_PIPE_INVSRCCOLOR_NODEPTHWRITE,    // QMB blood1/blood2, zero/1-srccolor
+	SCENE_PIPE_MOD_NODEPTHWRITE,            // caustics/detail decal, dstcolor/srccolor
 	SCENE_PIPE_COUNT
 };
 
