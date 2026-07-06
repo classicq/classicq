@@ -1118,17 +1118,26 @@ void GPU_EndFrame(void)
 	SDL_SubmitGPUCommandBuffer(frame_cmdbuf);
 	frame_cmdbuf = NULL;
 
-	// TEMP test hook: -autoshot takes a screenshot at frame 60, quits at 70
+	// TEMP test hook: -autoshot [frame] screenshots at frame N (default 60), quits at N+10
 	{
-		static int frames, enabled = -1;
-		if (enabled == -1)
-			enabled = COM_CheckParm("-autoshot") != 0;
-		if (enabled)
+		static int frames, shotframe = -1;
+		if (shotframe == -1)
+		{
+			int parm = COM_CheckParm("-autoshot");
+			shotframe = 0;
+			if (parm)
+			{
+				shotframe = 60;
+				if (parm + 1 < com_argc && com_argv[parm + 1][0] != '-' && com_argv[parm + 1][0] != '+')
+					shotframe = max(10, Q_atoi(com_argv[parm + 1]));
+			}
+		}
+		if (shotframe)
 		{
 			frames++;
-			if (frames == 60)
+			if (frames == shotframe)
 				Cbuf_AddText("screenshot autoshot\n");
-			if (frames == 70)
+			if (frames == shotframe + 10)
 				Host_Quit();
 		}
 	}

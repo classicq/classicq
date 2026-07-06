@@ -243,56 +243,16 @@ void R_CvarInit(void)
 		Cvar_Register(stub_cvars[i]);
 }
 
-int R_Init(void)
-{
-	GL_Texture_Init();
-	return 1;
-}
-
-void R_InitGL(void) {}
-
-void R_Shutdown(void)
-{
-	GL_Texture_Shutdown();
-}
-void R_PreMapLoad(void) {}
-void R_NewMap(void) {}
 void R_InitEfrags(void) {}
 void GL_CvarInit(void) {}
 void GL_Init(void) {}
 
 // ---- frame ----
 
-void R_PushDlights(void) {}
-void R_RenderView(void) {}
 void GL_Set2D(void) {}
-void R_PolyBlend(void) {}
-void R_BrightenScreen(void) {}
 void R_NetGraph(void) {}
 
-qboolean R_CullBox(vec3_t mins, vec3_t maxs)
-{
-	(void)mins; (void)maxs;
-	return false;
-}
-
-qboolean R_CullSphere(vec3_t centre, float radius)
-{
-	(void)centre; (void)radius;
-	return false;
-}
-
 // ---- loader hooks (gl_model.c stays compiled) ----
-
-void R_InitSky(void *texturedata)
-{
-	(void)texturedata;
-}
-
-void GL_SubdivideSurface(model_t *model, msurface_t *fa)
-{
-	(void)model; (void)fa;
-}
 
 // ---- FBO / post-process (real work happens in gpu_vid.c) ----
 
@@ -429,24 +389,5 @@ void QMB_StaticBubble(entity_t *ent)
 }
 
 // ---- misc gl-side entry points still referenced ----
-
-void R_DrawEntitiesOnList(visentlist_t *vislist)
-{
-	(void)vislist;
-}
-
-void R_AnimateLight(void) {}
-void R_RenderDlights(void) {}
-
-void R_MarkLights(model_t *model, dlight_t *light, int bit, unsigned int nodenum)
-{
-	(void)model; (void)light; (void)bit; (void)nodenum;
-}
-
-int R_LightPoint(vec3_t p)
-{
-	(void)p;
-	return 255;
-}
 
 void R_InitOtherTextures(void) {}
