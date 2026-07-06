@@ -1537,16 +1537,6 @@ static void applySoftGammaToBuffer(byte *buffer, int size) {
 	float br = v_blend[0], bgv = v_blend[1], bb = v_blend[2];
 	int i;
 
-	// match the GL R_BrightenScreen quirk: each loop pass doubled the buffer
-	{
-		float f = powf(fminf(ct, 3.0f), vid_gamma);
-		while (f > 1.0f)
-		{
-			ct *= 2.0f;
-			f *= 0.5f;
-		}
-	}
-
 	for (i = 0; i < size; i += 3) {
 		float r = buffer[i + 0] / 255.0f;
 		float gv = buffer[i + 1] / 255.0f;
