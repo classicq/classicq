@@ -673,11 +673,6 @@ void Draw_Fill(int x, int y, int w, int h, int c)
 	Draw_AlphaFill(x, y, w, h, c, 1);
 }
 
-void Draw_Line(int x1, int y1, int x2, int y2, float width, float r, float g, float b, float a)
-{
-	// no compiled caller
-	(void)x1; (void)y1; (void)x2; (void)y2; (void)width; (void)r; (void)g; (void)b; (void)a;
-}
 
 //=============================================================================
 
@@ -1126,8 +1121,6 @@ void Draw_DrawSubPicture(struct Picture *picture, float sx, float sy, float swid
 }
 
 // ---- netgraph, ported from gl_ngraph.c ----
-
-extern int netgraphtexture;
 
 #define NET_GRAPHHEIGHT 32
 

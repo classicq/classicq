@@ -22,13 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define GL_FRAMEBUFFER_H
 
 qboolean GL_FBO_Init(int width, int height);
-void GL_FBO_Shutdown(void);
-qboolean GL_FBO_Resize(int width, int height);
 void GL_FBO_Bind(void);
 void GL_FBO_Unbind(void);
 unsigned int GL_FBO_GetColorTexture(void);
-unsigned int GL_FBO_GetID(void);
-int GL_FBO_GetWidth(void);
-int GL_FBO_GetHeight(void);
 
 #endif

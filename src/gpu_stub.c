@@ -17,22 +17,18 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
-// temporary no-op renderer while SDL_GPU modules replace the GL ones
-// pieces move out of here milestone by milestone, then this file dies
+// renderer cvars, shared globals and no-op entry points kept off the gpu_* modules
 
-#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
 #include "quakedef.h"
 #include "gl_local.h"
-#include "gl_skinimp.h"
 #include "gl_framebuffer.h"
 #include "gl_post_process.h"
-#include "particles.h"
 #include "gpu_local.h"
 
-// ---- cvars (defaults copied from the GL renderer) ----
+// some cvars are registered only so old configs load without warnings
 
 cvar_t	r_drawentities = {"r_drawentities", "1"};
 cvar_t	r_lerpframes = {"r_lerpframes", "1"};
@@ -100,7 +96,7 @@ static cvar_t *stub_cvars[] = {
 	&gl_externalTextures_world, &gl_externalTextures_bmodels,
 };
 
-// ---- shared globals owned by the dropped GL files ----
+// ---- shared globals ----
 
 refdef_t r_refdef;
 vec3_t r_origin, vpn, vright, vup;
@@ -118,8 +114,7 @@ mleaf_t *r_viewleaf2, *r_oldviewleaf2;
 qboolean r_skyboxloaded;
 
 int lightmode = 2;
-int particletexture, netgraphtexture, playertextures, skyboxtextures;
-int playerfbtextures[MAX_CLIENTS];
+int particletexture, netgraphtexture, skyboxtextures;
 int underwatertexture, detailtexture;
 
 int texture_extension_number = 1;
@@ -131,11 +126,10 @@ qboolean gl_fbo = true;
 
 unsigned d_8to24table[256];
 unsigned d_8to24table2[256];
-unsigned short d_8to16table[256];
 float vid_gamma = 1.0f;
 byte vid_gamma_table[256];
 
-// ---- palette (real, engine reads these tables) ----
+// ---- palette ----
 
 void Check_Gamma(unsigned char *pal)
 {
@@ -229,27 +223,17 @@ void R_CvarInit(void)
 	Cmd_AddCommand("timerefresh", R_TimeRefresh_f);
 }
 
-void R_InitEfrags(void) {}
 void GL_CvarInit(void) {}
-void GL_Init(void) {}
-
-// ---- frame ----
-
 void GL_Set2D(void) {}
 
-// ---- loader hooks (gl_model.c stays compiled) ----
-
-// ---- FBO / post-process (real work happens in gpu_vid.c) ----
-
-qboolean GL_FBO_Init(int width, int height)
+void Draw_SetSize(unsigned int width, unsigned int height)
 {
 	(void)width; (void)height;
-	return true;
 }
 
-void GL_FBO_Shutdown(void) {}
+// ---- FBO / post-process shims, the real pass lives in gpu_vid.c ----
 
-qboolean GL_FBO_Resize(int width, int height)
+qboolean GL_FBO_Init(int width, int height)
 {
 	(void)width; (void)height;
 	return true;
@@ -263,28 +247,6 @@ unsigned int GL_FBO_GetColorTexture(void)
 	return 0;
 }
 
-unsigned int GL_FBO_GetID(void)
-{
-	return 0;
-}
-
-int GL_FBO_GetWidth(void)
-{
-	return vid.displaywidth;
-}
-
-int GL_FBO_GetHeight(void)
-{
-	return vid.displayheight;
-}
-
-qboolean GL_PostProcess_Init(void)
-{
-	return true;
-}
-
-void GL_PostProcess_Shutdown(void) {}
-
 qboolean GL_PostProcess_IsReady(void)
 {
 	return true;
@@ -295,12 +257,3 @@ void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, co
 	(void)color_tex;
 	GPU_SetPostParams(gamma, contrast, blend);
 }
-
-// ---- 2D leftovers (rest lives in gpu_draw2d.c) ----
-
-void Draw_SetSize(unsigned int width, unsigned int height)
-{
-	(void)width; (void)height;
-}
-
-// ---- misc gl-side entry points still referenced ----

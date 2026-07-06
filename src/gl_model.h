@@ -302,9 +302,6 @@ typedef struct {
 
 	float *texcoords;
 
-	int *vert_vbo_number;
-	int texcoord_vbo_number;
-
 	/* For array-based frame lerping */
 	trivertx_t *realposeverts; /* numverts * numposes */
 
@@ -421,15 +418,6 @@ typedef struct model_s
 	unsigned int num_vertices;
 
 	qboolean surface_colours_dirty;
-
-	unsigned int vbo_number;
-
-	unsigned int coords_vbo_offset;
-	unsigned int colours_vbo_offset;
-	unsigned int texcoords_vbo_offset[3];
-
-	unsigned int warp_vbo_number;
-	unsigned int warp_texcoords_vbo_offset;
 
 	float *vertcoords;
 	float *vertcolours;

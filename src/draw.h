@@ -43,7 +43,6 @@ void Draw_Character(int x, int y, unsigned char num);
 void Draw_ConsoleBackground(int lines);
 void Draw_TileClear(int x, int y, int w, int h);
 void Draw_Fill(int x, int y, int w, int h, int c);
-void Draw_Line(int x1, int y1, int x2, int y2, float width, float r, float g, float b, float alpha);
 void Draw_AlphaFill(int x, int y, int w, int h, int c, float alpha);
 void Draw_AlphaFillRGB(int x, int y, int w, int h, float r, float g, float b, float alpha);
 void Draw_FadeScreen(void);

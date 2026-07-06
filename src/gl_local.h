@@ -33,10 +33,6 @@ extern int glwidth, glheight;
 					//  1 pixel per triangle
 #define	MAX_LBM_HEIGHT		480
 
-#define SKYSHIFT		7
-#define	SKYSIZE			(1 << SKYSHIFT)
-#define SKYMASK			(SKYSIZE - 1)
-
 #define BACKFACE_EPSILON	0.01
 
 #ifdef FOD_BIGENDIAN
@@ -102,8 +98,6 @@ extern	int			d_lightstylevalue[256];	// 8.8 fraction of base light value
 
 extern	int	particletexture;
 extern	int	netgraphtexture;
-extern	int	playertextures;
-extern	int	playerfbtextures[MAX_CLIENTS];
 extern	int	skyboxtextures;
 extern	int underwatertexture, detailtexture;
 
@@ -132,7 +126,7 @@ void R_BrightenScreen (void);
 void R_DrawEntitiesOnList (visentlist_t *vislist);
 void R_InitOtherTextures(void);
 
-// gpu_rmain.c dlights
+// dlights: gpu_rmain.c, R_RenderDlights in gpu_part.c
 void R_MarkLights(model_t *model, dlight_t *light, int bit, unsigned int nodenum);
 void R_AnimateLight (void);
 void R_RenderDlights (void);
@@ -155,4 +149,3 @@ extern qboolean gl_fbo;
 void Check_Gamma (unsigned char *pal);
 void VID_SetPalette (unsigned char *palette);
 void GL_CvarInit(void);
-void GL_Init (void);

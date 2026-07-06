@@ -59,6 +59,7 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
+          cache-key: ${{ matrix.target }}
 
       - name: Build release binary
         shell: bash
@@ -69,7 +70,8 @@ jobs:
           fi
           for i in 1 2 3; do
             zig build $BUILD_ARGS && break || {
-              echo "::warning::Build attempt $i failed, retrying"
+              echo "::warning::Build attempt $i failed"
+              [ $i -eq 3 ] && exit 1
               rm -rf .zig-cache
               sleep 2
             }
@@ -207,7 +209,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VER="${TAG#v}"
-          BASE="https://github.com/classicq/classicq/releases/download/${TAG}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
           jq -n \
             --arg ver "$VER" \
             --arg win "$BASE/classicQ-$VER-windows-amd64.zip" \

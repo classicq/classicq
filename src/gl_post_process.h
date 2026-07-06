@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef GL_POST_PROCESS_H
 #define GL_POST_PROCESS_H
 
-qboolean GL_PostProcess_Init(void);
-void GL_PostProcess_Shutdown(void);
 qboolean GL_PostProcess_IsReady(void);
 void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, const float blend[4]);
 

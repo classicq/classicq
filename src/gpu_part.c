@@ -681,7 +681,7 @@ static void QWB_DrawBillboardParticleRotate(particle_texture_t *ptex, qmb_partic
 
 void QMB_DrawParticles (void) {
 	int	i, j, k, drawncount, pipe;
-	vec3_t v, up, right, billboard[4], velcoord[4], neworg;
+	vec3_t v, up, right, billboard[4], neworg;
 	vec3_t edges[8];
 	col_t edgecolor;
 	qmb_particle_t *p;
@@ -770,17 +770,6 @@ void QMB_DrawParticles (void) {
 			for (p = pt->start; p; p = p->next) {
 				if (particle_time < p->start || particle_time >= p->die)
 					continue;
-
-				// velcoord is computed and never used, matches the GL original
-				VectorCopy (p->vel, up);
-				CrossProduct(vpn, up, right);
-				VectorNormalizeFast(right);
-				VectorScale(up, pt->custom, up);
-
-				VectorAdd(up, right, velcoord[2]);
-				VectorSubtract(right, up, velcoord[3]);
-				VectorNegate(velcoord[2], velcoord[0]);
-				VectorNegate(velcoord[3], velcoord[1]);
 
 				if (p->rotspeed)
 					QWB_DrawBillboardParticleRotate(ptex, p, billboard, vpn);
