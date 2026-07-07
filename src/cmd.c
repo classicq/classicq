@@ -87,6 +87,9 @@ void Cbuf_InsertText (char *text)
 
 void Cbuf_Execute (void)
 {
+	// drain startup commands stranded by a wait during the one-shot replay
+	if (can_execute_functions)
+		Cbuf_ExecuteEx (cbuf_cmdsave);
 	Cbuf_ExecuteEx (cbuf_main);
 #ifndef SERVERONLY
 	Cbuf_ExecuteEx (cbuf_safe);
