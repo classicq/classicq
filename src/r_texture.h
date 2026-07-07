@@ -37,22 +37,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define MAX_GLTEXTURES 1024
 
 
-void GL_Bind (int texnum);
+void R_Bind (int texnum);
 
 
-void GL_Upload8 (byte *data, int width, int height, int mode);
-void GL_Upload32 (unsigned *data, int width, int height, int mode);
-int GL_LoadTexture (char *identifier, int width, int height, byte *data, int mode, int bpp);
+void R_Upload8 (byte *data, int width, int height, int mode);
+void R_Upload32 (unsigned *data, int width, int height, int mode);
+int R_LoadTexture (char *identifier, int width, int height, byte *data, int mode, int bpp);
 
 
-byte *GL_LoadImagePixels(char *, int, int, unsigned int *imagewidth, unsigned int *imageheight, int);
-int GL_LoadTexturePixels(byte *, char *, int, int, int);
-int GL_LoadTextureImage(char * , char *, int, int, int);
-int GL_LoadCharsetImage(char *, char *);
+byte *R_LoadImagePixels(char *, int, int, unsigned int *imagewidth, unsigned int *imageheight, int);
+int R_LoadTexturePixels(byte *, char *, int, int, int);
+int R_LoadTextureImage(char * , char *, int, int, int);
+int R_LoadCharsetImage(char *, char *);
 
-void GL_Texture_CvarInit(void);
-void GL_Texture_Init(void);
-void GL_Texture_Shutdown(void);
+void R_Texture_CvarInit(void);
+void R_Texture_Init(void);
+void R_Texture_Shutdown(void);
 
 
 extern cvar_t gl_max_size, gl_scaleModelTextures, gl_scaleTurbTextures, gl_miptexLevel;

@@ -158,11 +158,11 @@ static unsigned int part_firstvert;
 static unsigned int part_numverts;
 static qboolean part_full;
 
-void GL_DrawParticleInit(void)
+void R_DrawParticleInit(void)
 {
 }
 
-void GL_DrawParticleBegin(void)
+void R_DrawParticleBegin(void)
 {
 	r_partscale = 0.004 * tan(r_refdef.fov_x * (M_PI / 180) * 0.5f);
 
@@ -173,7 +173,7 @@ void GL_DrawParticleBegin(void)
 	part_full = false;
 }
 
-void GL_DrawParticle(particle_t *p)
+void R_DrawParticle(particle_t *p)
 {
 	scene_vert_t *v;
 	unsigned int firstvert;
@@ -223,7 +223,7 @@ void GL_DrawParticle(particle_t *p)
 	}
 }
 
-void GL_DrawParticleEnd(void)
+void R_DrawParticleEnd(void)
 {
 	unsigned int *idx;
 	unsigned int firstindex, i;
@@ -434,7 +434,7 @@ do {																													\
 	count++;																											\
 } while(0);
 
-void GL_Particles_CvarInit(void)
+void R_Particles_CvarInit(void)
 {
 	Cvar_SetCurrentGroup(CVAR_GROUP_PARTICLES);
 	Cvar_Register (&gl_clipparticles);
@@ -443,11 +443,11 @@ void GL_Particles_CvarInit(void)
 	Cvar_ResetCurrentGroup();
 }
 
-void GL_Particles_TextureInit(void)
+void R_Particles_TextureInit(void)
 {
 	int i, count = 0, particlefont;
 
-	if (!(particlefont = GL_LoadTextureImage ("textures/particles/particlefont", "qmb:particlefont", 256, 256, TEX_ALPHA | TEX_COMPLAIN)))
+	if (!(particlefont = R_LoadTextureImage ("textures/particles/particlefont", "qmb:particlefont", 256, 256, TEX_ALPHA | TEX_COMPLAIN)))
 	{
 		qmb_initialized = false;
 		return;

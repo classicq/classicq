@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#ifndef GL_FRAMEBUFFER_H
-#define GL_FRAMEBUFFER_H
+#ifndef R_FRAMEBUFFER_H
+#define R_FRAMEBUFFER_H
 
-qboolean GL_FBO_Init(int width, int height);
-void GL_FBO_Bind(void);
-void GL_FBO_Unbind(void);
-unsigned int GL_FBO_GetColorTexture(void);
+qboolean R_FBO_Init(int width, int height);
+void R_FBO_Bind(void);
+void R_FBO_Unbind(void);
+unsigned int R_FBO_GetColorTexture(void);
 
 #endif

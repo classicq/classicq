@@ -38,7 +38,7 @@ int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height);
 // column-major modelview/projection + viewport of the last 3D scene; 0 if none yet
 int GPU_GetSceneMatrices(float *modelview, float *projection, int *viewport);
 
-// post pass parameters, latched per frame by GL_PostProcess_Draw
+// post pass parameters, latched per frame by R_PostProcess_Draw
 void GPU_SetPostParams(float gamma, float contrast, const float blend[4]);
 
 // ---- textures (gpu_texture.c) ----

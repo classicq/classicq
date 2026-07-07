@@ -1201,9 +1201,9 @@ void SCR_UpdateScreen (void) {
 	glwidth = VID_GetWidth();
 	glheight = VID_GetHeight();
 
-	soft_gamma = V_SoftGammaActive() && GL_FBO_Init(glwidth, glheight);
+	soft_gamma = V_SoftGammaActive() && R_FBO_Init(glwidth, glheight);
 	if (soft_gamma)
-		GL_FBO_Bind();
+		R_FBO_Bind();
 
 	SCR_SetUpToDrawConsole ();
 
@@ -1211,7 +1211,7 @@ void SCR_UpdateScreen (void) {
 
 	SCR_SetupAutoID ();
 
-	GL_Set2D ();
+	R_Set2D ();
 
 	R_PolyBlend ();
 
@@ -1234,8 +1234,8 @@ void SCR_UpdateScreen (void) {
 	SCR_CheckAutoScreenshot();
 
 	if (soft_gamma) {
-		GL_FBO_Unbind();
-		GL_PostProcess_Draw(GL_FBO_GetColorTexture(), v_gamma.value, v_contrast.value, v_blend);
+		R_FBO_Unbind();
+		R_PostProcess_Draw(R_FBO_GetColorTexture(), v_gamma.value, v_contrast.value, v_blend);
 	}
 
 	VID_Update(0);

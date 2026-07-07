@@ -217,14 +217,14 @@ void R_CvarInit(void)
 	for (i = 0; i < sizeof(stub_cvars) / sizeof(*stub_cvars); i++)
 		Cvar_Register(stub_cvars[i]);
 
-	GL_Particles_CvarInit();
+	R_Particles_CvarInit();
 
 	Cmd_AddCommand("loadsky", R_LoadSky_f);
 	Cmd_AddCommand("timerefresh", R_TimeRefresh_f);
 }
 
-void GL_CvarInit(void) {}
-void GL_Set2D(void) {}
+void R_CommonCvarInit(void) {}
+void R_Set2D(void) {}
 
 void Draw_SetSize(unsigned int width, unsigned int height)
 {
@@ -233,26 +233,26 @@ void Draw_SetSize(unsigned int width, unsigned int height)
 
 // ---- FBO / post-process shims, the real pass lives in gpu_vid.c ----
 
-qboolean GL_FBO_Init(int width, int height)
+qboolean R_FBO_Init(int width, int height)
 {
 	(void)width; (void)height;
 	return true;
 }
 
-void GL_FBO_Bind(void) {}
-void GL_FBO_Unbind(void) {}
+void R_FBO_Bind(void) {}
+void R_FBO_Unbind(void) {}
 
-unsigned int GL_FBO_GetColorTexture(void)
+unsigned int R_FBO_GetColorTexture(void)
 {
 	return 0;
 }
 
-qboolean GL_PostProcess_IsReady(void)
+qboolean R_PostProcess_IsReady(void)
 {
 	return true;
 }
 
-void GL_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, const float blend[4])
+void R_PostProcess_Draw(unsigned int color_tex, float gamma, float contrast, const float blend[4])
 {
 	(void)color_tex;
 	GPU_SetPostParams(gamma, contrast, blend);

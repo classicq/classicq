@@ -323,7 +323,7 @@ void customCrosshair_Init(void)
 		customcrosshairdata[i++] = (c == 'x' || c  == 'X') ? 0xfe : 0xff;
 	}
 	fclose(f);
-	crosshairtexture_txt = GL_LoadTexture ("", 8, 8, customcrosshairdata, TEX_ALPHA, 1);
+	crosshairtexture_txt = R_LoadTexture ("", 8, 8, customcrosshairdata, TEX_ALPHA, 1);
 	GPU_Texture_SetPrefs(crosshairtexture_txt, 0);
 	customcrosshair_loaded |= CROSSHAIR_TXT;
 }
@@ -352,9 +352,9 @@ static int Draw_LoadCharset(char *name)
 			src += 128 * 8;
 			dest += 128 * 8 * 2;
 		}
-		char_texture = GL_LoadTexture ("pic:charset", 128, 256, buf, TEX_ALPHA, 1);
+		char_texture = R_LoadTexture ("pic:charset", 128, 256, buf, TEX_ALPHA, 1);
 	}
-	else if ((texnum = GL_LoadCharsetImage (va("textures/charsets/%s", name), "pic:charset")))
+	else if ((texnum = R_LoadCharsetImage (va("textures/charsets/%s", name), "pic:charset")))
 	{
 		char_texture = texnum;
 	}
@@ -430,7 +430,7 @@ void DrawImp_CvarInit(void)
 
 	Cvar_ResetCurrentGroup();
 
-	GL_Texture_CvarInit();
+	R_Texture_CvarInit();
 }
 
 static struct Picture *dummypicture;
@@ -486,7 +486,7 @@ void DrawImp_Init(void)
 
 	for (i = 0; i < NUMCROSSHAIRS; i++)
 	{
-		crosshairtextures[i] = GL_LoadTexture ("", 8, 8, crosshairdata[i], TEX_ALPHA, 1);
+		crosshairtextures[i] = R_LoadTexture ("", 8, 8, crosshairdata[i], TEX_ALPHA, 1);
 		GPU_Texture_SetPrefs(crosshairtextures[i], 0);
 	}
 	customCrosshair_Init();

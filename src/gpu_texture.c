@@ -300,7 +300,7 @@ void GPU_Texture_ShutdownTable(void)
 
 // ---- engine-facing texture API (gl_texture.c semantics) ----
 
-void GL_Bind(int texnum)
+void R_Bind(int texnum)
 {
 	currenttexture = texnum;
 }
@@ -341,7 +341,7 @@ static int prefs_for_mode(int mode)
 	return linear ? GPU_TEXPREF_LINEAR : 0;
 }
 
-void GL_Upload32(unsigned *data, int width, int height, int mode)
+void R_Upload32(unsigned *data, int width, int height, int mode)
 {
 	int scaled_width, scaled_height;
 	unsigned char *scaled = NULL;
@@ -365,7 +365,7 @@ void GL_Upload32(unsigned *data, int width, int height, int mode)
 	free(scaled);
 }
 
-void GL_Upload8(byte *data, int width, int height, int mode)
+void R_Upload8(byte *data, int width, int height, int mode)
 {
 	unsigned int *buf;
 	unsigned int *table;
@@ -401,7 +401,7 @@ void GL_Upload8(byte *data, int width, int height, int mode)
 			mode &= ~TEX_ALPHA;
 	}
 
-	GL_Upload32(buf, width, height, mode);
+	R_Upload32(buf, width, height, mode);
 	free(buf);
 }
 
@@ -417,7 +417,7 @@ static gltexture_t *find_texture(const char *identifier)
 	return NULL;
 }
 
-int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode, int bpp)
+int R_LoadTexture(char *identifier, int width, int height, byte *data, int mode, int bpp)
 {
 	gltexture_t *glt = NULL;
 	int scaled_width, scaled_height;
@@ -436,7 +436,7 @@ int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode
 				&& glt->crc == crc && glt->bpp == bpp
 				&& (glt->texmode & ~(TEX_COMPLAIN | TEX_NOSCALE)) == (mode & ~(TEX_COMPLAIN | TEX_NOSCALE)))
 			{
-				GL_Bind(glt->texnum);
+				R_Bind(glt->texnum);
 				return glt->texnum;
 			}
 			// same name, different content: re-upload into the same slot
@@ -446,7 +446,7 @@ int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode
 	if (!glt)
 	{
 		if (numgltextures >= MAX_GLTEXTURES)
-			Sys_Error("GL_LoadTexture: cache full");
+			Sys_Error("R_LoadTexture: cache full");
 		glt = &gltextures[numgltextures++];
 		memset(glt, 0, sizeof(*glt));
 		if (identifier)
@@ -462,18 +462,18 @@ int GL_LoadTexture(char *identifier, int width, int height, byte *data, int mode
 	glt->crc = crc;
 	glt->bpp = bpp;
 
-	GL_Bind(glt->texnum);
+	R_Bind(glt->texnum);
 	if (bpp == 1)
-		GL_Upload8(data, width, height, mode);
+		R_Upload8(data, width, height, mode);
 	else if (bpp == 4)
-		GL_Upload32((unsigned *)data, width, height, mode);
+		R_Upload32((unsigned *)data, width, height, mode);
 	else
-		Sys_Error("GL_LoadTexture: unsupported bpp %d", bpp);
+		Sys_Error("R_LoadTexture: unsupported bpp %d", bpp);
 
 	return glt->texnum;
 }
 
-byte *GL_LoadImagePixels(char *filename, int matchwidth, int matchheight, unsigned int *imagewidth, unsigned int *imageheight, int mode)
+byte *R_LoadImagePixels(char *filename, int matchwidth, int matchheight, unsigned int *imagewidth, unsigned int *imageheight, int mode)
 {
 	char basename[MAX_QPATH], name[MAX_QPATH];
 	byte *pixels;
@@ -504,7 +504,7 @@ byte *GL_LoadImagePixels(char *filename, int matchwidth, int matchheight, unsign
 	return NULL;
 }
 
-int GL_LoadTexturePixels(byte *data, char *identifier, int width, int height, int mode)
+int R_LoadTexturePixels(byte *data, char *identifier, int width, int height, int mode)
 {
 	int i, j, image_size;
 
@@ -533,10 +533,10 @@ int GL_LoadTexturePixels(byte *data, char *identifier, int width, int height, in
 		}
 	}
 
-	return GL_LoadTexture(identifier, width, height, data, mode, 4);
+	return R_LoadTexture(identifier, width, height, data, mode, 4);
 }
 
-int GL_LoadTextureImage(char *filename, char *identifier, int matchwidth, int matchheight, int mode)
+int R_LoadTextureImage(char *filename, char *identifier, int matchwidth, int matchheight, int mode)
 {
 	byte *pixels;
 	unsigned int w, h;
@@ -545,22 +545,22 @@ int GL_LoadTextureImage(char *filename, char *identifier, int matchwidth, int ma
 	if (!identifier)
 		identifier = filename;
 
-	pixels = GL_LoadImagePixels(filename, matchwidth, matchheight, &w, &h, mode);
+	pixels = R_LoadImagePixels(filename, matchwidth, matchheight, &w, &h, mode);
 	if (!pixels)
 		return 0;
 
-	texnum = GL_LoadTexturePixels(pixels, identifier, w, h, mode);
+	texnum = R_LoadTexturePixels(pixels, identifier, w, h, mode);
 	free(pixels);
 	return texnum;
 }
 
-int GL_LoadCharsetImage(char *filename, char *identifier)
+int R_LoadCharsetImage(char *filename, char *identifier)
 {
 	byte *pixels, *buf, *src, *dest;
 	unsigned int w, h;
 	int i, image_size, texnum;
 
-	pixels = GL_LoadImagePixels(filename, 0, 0, &w, &h, 0);
+	pixels = R_LoadImagePixels(filename, 0, 0, &w, &h, 0);
 	if (!pixels)
 		return 0;
 
@@ -592,14 +592,14 @@ int GL_LoadCharsetImage(char *filename, char *identifier)
 		dest += image_size >> 1;
 	}
 
-	texnum = GL_LoadTexture(identifier, w, h * 2, buf, TEX_ALPHA | TEX_NOCOMPRESS, 4);
+	texnum = R_LoadTexture(identifier, w, h * 2, buf, TEX_ALPHA | TEX_NOCOMPRESS, 4);
 
 	free(buf);
 	free(pixels);
 	return texnum;
 }
 
-void GL_Texture_CvarInit(void)
+void R_Texture_CvarInit(void)
 {
 	Cvar_SetCurrentGroup(CVAR_GROUP_TEXTURES);
 	Cvar_Register(&gl_picmip);
@@ -608,12 +608,12 @@ void GL_Texture_CvarInit(void)
 	Cvar_ResetCurrentGroup();
 }
 
-void GL_Texture_Init(void)
+void R_Texture_Init(void)
 {
 	numgltextures = 0;
 }
 
-void GL_Texture_Shutdown(void)
+void R_Texture_Shutdown(void)
 {
 	numgltextures = 0;
 }

@@ -67,8 +67,8 @@ void QMB_StaticBubble (entity_t *ent);
 
 extern qboolean qmb_initialized;
 
-void GL_Particles_CvarInit(void);
-void GL_Particles_TextureInit(void);
+void R_Particles_CvarInit(void);
+void R_Particles_TextureInit(void);
 
 void Classic_LoadParticleTextures(void);
 
@@ -106,7 +106,7 @@ extern	int underwatertexture, detailtexture;
 extern	int		lightmode;		// set to gl_lightmode on mapchange
 
 // gpu_world.c
-void GL_SubdivideSurface(model_t *model, msurface_t *fa);
+void R_SubdivideSurface(model_t *model, msurface_t *fa);
 void EmitCausticsPolys (void);
 void R_DrawSkyChain (void);
 void R_LoadSky_f(void);
@@ -114,7 +114,7 @@ void R_DrawSkyBox (void);
 extern qboolean	r_skyboxloaded;
 
 // gpu_draw2d.c
-void GL_Set2D (void);
+void R_Set2D (void);
 void Draw_SizeChanged(void);
 void R_NetGraph (void);
 
@@ -136,16 +136,16 @@ int R_LightPoint (vec3_t p);
 void R_StoreEfrags (efrag_t **ppefrag);
 
 // gl_mesh.c
-void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr);
+void R_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr);
 
 // gpu_world.c world drawing
 void R_DrawBrushModel (entity_t *e);
 void R_DrawWorld (void);
 void R_DrawWaterSurfaces (void);
-void GL_BuildLightmaps (void);
+void R_BuildLightmaps (void);
 
 extern qboolean gl_fbo;
 
 void Check_Gamma (unsigned char *pal);
 void VID_SetPalette (unsigned char *palette);
-void GL_CvarInit(void);
+void R_CommonCvarInit(void);

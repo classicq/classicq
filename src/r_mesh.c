@@ -190,10 +190,10 @@ static int MakeTextureCoordinates(aliashdr_t *hdr, unsigned char *backside)
 
 /*
 ================
-GL_MakeAliasModelDisplayLists
+R_MakeAliasModelDisplayLists
 ================
 */
-void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr)
+void R_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr)
 {
 	aliashdr_t *paliashdr;
 	unsigned short *collisionrevmap;
@@ -209,13 +209,13 @@ void GL_MakeAliasModelDisplayLists (model_t *m, aliashdr_t *hdr)
 #endif
 
 	if (!MakeCollisionMap(hdr, &collisionrevmap, &backside))
-		Sys_Error("GL_MakeAliasModelDisplayLists: MakeCollisionMap() failed.");
+		Sys_Error("R_MakeAliasModelDisplayLists: MakeCollisionMap() failed.");
 
 	if (!MakeIndices(hdr, collisionrevmap, backside))
-		Sys_Error("GL_MakeAliasModelDisplayLists: MakeIndices() failed.");
+		Sys_Error("R_MakeAliasModelDisplayLists: MakeIndices() failed.");
 
 	if (!MakeTextureCoordinates(hdr, backside))
-		Sys_Error("GL_MakeAliasModelDisplayLists: MakeTextureCoordinates() failed.");
+		Sys_Error("R_MakeAliasModelDisplayLists: MakeTextureCoordinates() failed.");
 
 	free(collisionrevmap);
 	free(backside);

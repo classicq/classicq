@@ -50,7 +50,7 @@ void Classic_LoadParticleTextures (void)
 	unsigned int data[32][32];
 
 	particletexture = texture_extension_number++;
-	GL_Bind(particletexture);
+	R_Bind(particletexture);
 
 	// clear to transparent white
 	for (i = 0; i < 32 * 32; i++)
@@ -66,7 +66,7 @@ void Classic_LoadParticleTextures (void)
 		}
 	}
 
-	GL_Upload32 ((unsigned int*) data, 32, 32, TEX_MIPMAP | TEX_ALPHA | TEX_NOSCALE);
+	R_Upload32 ((unsigned int*) data, 32, 32, TEX_MIPMAP | TEX_ALPHA | TEX_NOSCALE);
 }
 
 static int Classic_InitParticles(void)
@@ -467,7 +467,7 @@ static void Classic_DrawParticles(void)
 	if (!active_particles)
 		return;
 
-	GL_DrawParticleBegin();
+	R_DrawParticleBegin();
 
 	frametime = cls.frametime;
 	if (cl.paused)
@@ -506,7 +506,7 @@ static void Classic_DrawParticles(void)
 			break;
 		}
 
-		GL_DrawParticle(p);
+		R_DrawParticle(p);
 
 		p->org[0] += p->vel[0] * frametime;
 		p->org[1] += p->vel[1] * frametime;
@@ -567,7 +567,7 @@ static void Classic_DrawParticles(void)
 		}
 	}
 
-	GL_DrawParticleEnd();
+	R_DrawParticleEnd();
 }
 
 
@@ -578,7 +578,7 @@ int R_InitParticles(void)
 	{
 		QMB_InitParticles();
 
-		GL_DrawParticleInit();
+		R_DrawParticleInit();
 
 		return 1;
 	}

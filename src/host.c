@@ -199,7 +199,7 @@ void Host_Init(int argc, char **argv)
 
 	VID_CvarInit();
 	S_CvarInit();
-	GL_CvarInit();
+	R_CommonCvarInit();
 	Image_CvarInit();
 	R_CvarInit();
 	Con_CvarInit();

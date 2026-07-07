@@ -172,7 +172,7 @@ unsigned short	ramps[3][256];
 qboolean V_SoftGammaActive(void)
 {
 	// SDL3 has no gamma ramps, shader gamma is the only path
-	return gl_fbo && GL_PostProcess_IsReady();
+	return gl_fbo && R_PostProcess_IsReady();
 }
 
 

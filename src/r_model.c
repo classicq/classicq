@@ -466,38 +466,38 @@ static int Mod_LoadExternalTexture(model_t *model, texture_t *tx, int mode)
 
 	if (model->isworldmodel)
 	{
-		if ((tx->gl_texturenum = GL_LoadTextureImage (va("textures/%s/%s", mapname, name), name, 0, 0, mode)))
+		if ((tx->gl_texturenum = R_LoadTextureImage (va("textures/%s/%s", mapname, name), name, 0, 0, mode)))
 		{
 			if (!ISTURBTEX(model, name))
-				tx->fb_texturenum = GL_LoadTextureImage (va("textures/%s/%s_luma", mapname, name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
+				tx->fb_texturenum = R_LoadTextureImage (va("textures/%s/%s_luma", mapname, name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
 		}
 		else
 		{
 			if (groupname)
 			{
-				if ((tx->gl_texturenum = GL_LoadTextureImage (va("textures/%s/%s", groupname, name), name, 0, 0, mode)))
+				if ((tx->gl_texturenum = R_LoadTextureImage (va("textures/%s/%s", groupname, name), name, 0, 0, mode)))
 				{
 					if (!ISTURBTEX(model, name))
-						tx->fb_texturenum = GL_LoadTextureImage (va("textures/%s/%s_luma", groupname, name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
+						tx->fb_texturenum = R_LoadTextureImage (va("textures/%s/%s_luma", groupname, name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
 				}
 			}
 		}
 	}
 	else
 	{
-		if ((tx->gl_texturenum = GL_LoadTextureImage (va("textures/bmodels/%s", name), name, 0, 0, mode)))
+		if ((tx->gl_texturenum = R_LoadTextureImage (va("textures/bmodels/%s", name), name, 0, 0, mode)))
 		{
 			if (!ISTURBTEX(model, name))
-				tx->fb_texturenum = GL_LoadTextureImage (va("textures/bmodels/%s_luma", name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
+				tx->fb_texturenum = R_LoadTextureImage (va("textures/bmodels/%s_luma", name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
 		}
 	}
 
 	if (!tx->gl_texturenum)
 	{
-		if ((tx->gl_texturenum = GL_LoadTextureImage (va("textures/%s", name), name, 0, 0, mode)))
+		if ((tx->gl_texturenum = R_LoadTextureImage (va("textures/%s", name), name, 0, 0, mode)))
 		{
 			if (!ISTURBTEX(model, name))
-				tx->fb_texturenum = GL_LoadTextureImage (va("textures/%s_luma", name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
+				tx->fb_texturenum = R_LoadTextureImage (va("textures/%s_luma", name), va("@fb_%s", name), 0, 0, mode | TEX_LUMA);
 		}
 	}
 
@@ -647,7 +647,7 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 			{
 				com_netpath[0] = 0;
 				alpha_flag = ISALPHATEX(model, tx->name) ? TEX_ALPHA : 0;
-				tx->gl_texturenum = GL_LoadTexturePixels (data, tx->name, tx->width, tx->height, texmode | alpha_flag);
+				tx->gl_texturenum = R_LoadTexturePixels (data, tx->name, tx->width, tx->height, texmode | alpha_flag);
 				free(data);
 				continue;
 			}
@@ -691,9 +691,9 @@ static void Mod_LoadTextures(model_t *model, lump_t *l)
 			data = freethis;
 		}
 		alpha_flag = ISALPHATEX(model, tx->name) ? TEX_ALPHA : 0;
-		tx->gl_texturenum = GL_LoadTexture (texname, width, height, data, texmode | brighten_flag | alpha_flag, 1);
+		tx->gl_texturenum = R_LoadTexture (texname, width, height, data, texmode | brighten_flag | alpha_flag, 1);
 		if (!ISTURBTEX(model, tx->name) && Img_HasFullbrights(data, width * height))
-			tx->fb_texturenum = GL_LoadTexture (va("@fb_%s", texname), width, height, data, texmode | TEX_FULLBRIGHT, 1);
+			tx->fb_texturenum = R_LoadTexture (va("@fb_%s", texname), width, height, data, texmode | TEX_FULLBRIGHT, 1);
 
 		free(freethis);
 	}
@@ -1344,7 +1344,7 @@ static void Mod_LoadFaces(model_t *model, lump_t *l)
 		if (ISSKYTEX(out->texinfo->texture->name))
 		{	// sky
 			flags |= (SURF_DRAWSKY | SURF_DRAWTILED);
-			GL_SubdivideSurface(model, out);	// cut up polygon for warps
+			R_SubdivideSurface(model, out);	// cut up polygon for warps
 			model->surfflags[surfnum] = flags;
 			continue;
 		}
@@ -1357,7 +1357,7 @@ static void Mod_LoadFaces(model_t *model, lump_t *l)
 				out->extents[i] = 16384;
 				out->texturemins[i] = -8192;
 			}
-			GL_SubdivideSurface(model, out);	// cut up polygon for warps
+			R_SubdivideSurface(model, out);	// cut up polygon for warps
 			model->surfflags[surfnum] = flags;
 			continue;
 		}
@@ -1424,7 +1424,7 @@ static void Mod_LoadFacesBSP2(model_t *model, lump_t *l)
 		if (ISSKYTEX(out->texinfo->texture->name))
 		{
 			flags |= (SURF_DRAWSKY | SURF_DRAWTILED);
-			GL_SubdivideSurface(model, out);
+			R_SubdivideSurface(model, out);
 			model->surfflags[surfnum] = flags;
 			continue;
 		}
@@ -1437,7 +1437,7 @@ static void Mod_LoadFacesBSP2(model_t *model, lump_t *l)
 				out->extents[i] = 16384;
 				out->texturemins[i] = -8192;
 			}
-			GL_SubdivideSurface(model, out);
+			R_SubdivideSurface(model, out);
 			model->surfflags[surfnum] = flags;
 			continue;
 		}
@@ -2382,12 +2382,12 @@ static int Mod_LoadExternalSkin(model_t *model, char *identifier, int *fb_texnum
 		texmode |= TEX_NOSCALE;
 
 	snprintf(loadpath, sizeof(loadpath), "textures/models/%s", identifier);
-	texnum = GL_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
+	texnum = R_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
 
 	if (!texnum)
 	{
 		snprintf(loadpath, sizeof(loadpath), "textures/%s", identifier);
-		texnum = GL_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
+		texnum = R_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
 	}
 
 	*fb_texnum = 0;
@@ -2432,11 +2432,11 @@ static void *Mod_LoadAllSkins(model_t *model, aliashdr_t *pheader, int numskins,
 			gl_texnum = fb_texnum = 0;
 			if (!(gl_texnum = Mod_LoadExternalSkin(model, identifier, &fb_texnum)))
 			{
-				gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight,
+				gl_texnum = R_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight,
 					(byte *) (pskintype + 1), texmode, 1);
 
 				if (Img_HasFullbrights((byte *)(pskintype + 1),	pheader->skinwidth * pheader->skinheight))
-					fb_texnum = GL_LoadTexture (va("@fb_%s", identifier), pheader->skinwidth,
+					fb_texnum = R_LoadTexture (va("@fb_%s", identifier), pheader->skinwidth,
 					pheader->skinheight, (byte *) (pskintype + 1), texmode | TEX_FULLBRIGHT, 1);
 			}
 
@@ -2467,11 +2467,11 @@ static void *Mod_LoadAllSkins(model_t *model, aliashdr_t *pheader, int numskins,
 				gl_texnum = fb_texnum = 0;
 				if (!(gl_texnum = Mod_LoadExternalSkin(model, identifier, &fb_texnum)))
 				{
-					gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth,
+					gl_texnum = R_LoadTexture (identifier, pheader->skinwidth,
 						pheader->skinheight, (byte *) (pskintype), texmode, 1);
 
 					if (Img_HasFullbrights((byte *) (pskintype), pheader->skinwidth*pheader->skinheight))
-						fb_texnum = GL_LoadTexture (va("@fb_%s", identifier),
+						fb_texnum = R_LoadTexture (va("@fb_%s", identifier),
 						pheader->skinwidth,  pheader->skinheight, (byte *) (pskintype), texmode | TEX_FULLBRIGHT, 1);
 				}
 
@@ -2659,7 +2659,7 @@ static void Mod_LoadAliasModel(model_t *mod, void *buffer)
 	mod->type = mod_alias;
 
 	// build the draw lists
-	GL_MakeAliasModelDisplayLists (mod, pheader);
+	R_MakeAliasModelDisplayLists (mod, pheader);
 
 	mod->extradata = pheader;
 }
@@ -2677,12 +2677,12 @@ static int Mod_LoadExternalSpriteSkin(model_t *model, char *identifier, int fram
 		texmode |= TEX_NOSCALE;
 
 	snprintf(loadpath, sizeof(loadpath), "textures/sprites/%s", identifier);
-	texnum = GL_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
+	texnum = R_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
 
 	if (!texnum)
 	{
 		snprintf(loadpath, sizeof(loadpath), "textures/%s", identifier);
-		texnum = GL_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
+		texnum = R_LoadTextureImage (loadpath, identifier, 0, 0, texmode);
 	}
 
 	return texnum;
@@ -2727,7 +2727,7 @@ static void *Mod_LoadSpriteFrame(model_t *model, void * pin, mspriteframe_t **pp
 
 	snprintf(identifier, sizeof(identifier), "sprites/%s_%i", basename, framenum);
 	if (!(texnum = Mod_LoadExternalSpriteSkin(model, identifier, framenum)))
-		texnum = GL_LoadTexture (identifier, width, height, (byte *) (pinframe + 1), texmode, 1);
+		texnum = R_LoadTexture (identifier, width, height, (byte *) (pinframe + 1), texmode, 1);
 
 	pspriteframe->gl_texturenum = texnum;
 

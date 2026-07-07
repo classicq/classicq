@@ -854,8 +854,8 @@ void R_InitOtherTextures(void)
 {
 	static const int flags = TEX_MIPMAP | TEX_ALPHA | TEX_COMPLAIN;
 
-	underwatertexture = GL_LoadTextureImage ("textures/water_caustic", NULL, 0, 0,  flags );
-	detailtexture = GL_LoadTextureImage("textures/detail", NULL, 256, 256, flags);
+	underwatertexture = R_LoadTextureImage ("textures/water_caustic", NULL, 0, 0,  flags );
+	detailtexture = R_LoadTextureImage("textures/detail", NULL, 256, 256, flags);
 }
 
 // ---- texture chains ----
@@ -1282,7 +1282,7 @@ static void SubdividePolygon(msurface_t *warpface, int numverts, float *verts)
 }
 
 // Breaks a polygon up along axial 64 unit boundaries so that turbulent and sky warps can be done reasonably.
-void GL_SubdivideSurface(model_t *model, msurface_t *fa)
+void R_SubdivideSurface(model_t *model, msurface_t *fa)
 {
 	vec3_t verts[64];
 	int i, lindex;
@@ -1293,11 +1293,11 @@ void GL_SubdivideSurface(model_t *model, msurface_t *fa)
 	/* Build simple verts for fastturb/fastsky */
 	fa->fastpolys = malloc(fa->numedges * 3 * sizeof(*fa->fastpolys));
 	if (fa->fastpolys == 0)
-		Sys_Error("GL_SubdivideSurface: Out of memory\n");
+		Sys_Error("R_SubdivideSurface: Out of memory\n");
 
 	fa->shadertexcoords = malloc(fa->numedges * 3 * sizeof(*fa->shadertexcoords));
 	if (fa->shadertexcoords == 0)
-		Sys_Error("GL_SubdivideSurface: Out of memory\n");
+		Sys_Error("R_SubdivideSurface: Out of memory\n");
 
 	// convert edges back to a normal polygon
 	for (i = 0; i < fa->numedges && i < 64; i++)
@@ -1339,10 +1339,10 @@ int R_SetSky(char *skyname)
 	for (i = 0; i < 6; i++)
 	{
 		if (
-		    !(data[i] = GL_LoadImagePixels (va("env/%s%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
-		    !(data[i] = GL_LoadImagePixels (va("gfx/env/%s%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
-		    !(data[i] = GL_LoadImagePixels (va("env/%s_%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
-		    !(data[i] = GL_LoadImagePixels (va("gfx/env/%s_%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0))
+		    !(data[i] = R_LoadImagePixels (va("env/%s%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
+		    !(data[i] = R_LoadImagePixels (va("gfx/env/%s%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
+		    !(data[i] = R_LoadImagePixels (va("env/%s_%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0)) &&
+		    !(data[i] = R_LoadImagePixels (va("gfx/env/%s_%s", skyname, skybox_ext[i]), 0, 0, &imagewidth, &imageheight, 0))
 		   )
 		{
 			Com_Printf ("Couldn't load skybox \"%s\"\n", skyname);
@@ -1361,8 +1361,8 @@ int R_SetSky(char *skyname)
 
 	for (i = 0; i < 6; i++)
 	{
-		GL_Bind (skyboxtextures + i);
-		GL_Upload32 ((unsigned int *) data[i], imagewidth, imageheight, TEX_NOCOMPRESS);
+		R_Bind (skyboxtextures + i);
+		R_Upload32 ((unsigned int *) data[i], imagewidth, imageheight, TEX_NOCOMPRESS);
 		GPU_Texture_SetPrefs(skyboxtextures + i, GPU_TEXPREF_LINEAR | GPU_TEXPREF_CLAMP);
 	}
 
@@ -2323,7 +2323,7 @@ static void BuildSurfaceDisplayList(model_t *model, msurface_t *fa)
 	}
 }
 
-static void GL_CreateSurfaceLightmap(msurface_t *surf)
+static void R_CreateSurfaceLightmap(msurface_t *surf)
 {
 	int smax, tmax;
 	byte *base;
@@ -2332,11 +2332,11 @@ static void GL_CreateSurfaceLightmap(msurface_t *surf)
 	tmax = (surf->extents[1] >> 4) + 1;
 
 	if (smax > BLOCK_WIDTH)
-		Host_Error("GL_CreateSurfaceLightmap: smax = %d > BLOCK_WIDTH", smax);
+		Host_Error("R_CreateSurfaceLightmap: smax = %d > BLOCK_WIDTH", smax);
 	if (tmax > BLOCK_HEIGHT)
-		Host_Error("GL_CreateSurfaceLightmap: tmax = %d > BLOCK_HEIGHT", tmax);
+		Host_Error("R_CreateSurfaceLightmap: tmax = %d > BLOCK_HEIGHT", tmax);
 	if (smax * tmax > MAX_LIGHTMAP_SIZE)
-		Host_Error("GL_CreateSurfaceLightmap: smax * tmax = %d > MAX_LIGHTMAP_SIZE", smax * tmax);
+		Host_Error("R_CreateSurfaceLightmap: smax * tmax = %d > MAX_LIGHTMAP_SIZE", smax * tmax);
 
 	surf->lightmaptexturenum = AllocBlock (smax, tmax, &surf->light_s, &surf->light_t);
 	base = lightmaps + surf->lightmaptexturenum * BLOCK_WIDTH * BLOCK_HEIGHT * 4;
@@ -2461,7 +2461,7 @@ static void World_BuildModelBuffer(model_t *m)
 }
 
 //Builds the lightmap data and vertex buffers for all brush models
-void GL_BuildLightmaps(void)
+void R_BuildLightmaps(void)
 {
 	int i, j;
 	model_t	*m;
@@ -2487,7 +2487,7 @@ void GL_BuildLightmaps(void)
 				continue;
 			if (m->surfaces[i].texinfo->flags & TEX_SPECIAL)
 				continue;
-			GL_CreateSurfaceLightmap(m->surfaces + i);
+			R_CreateSurfaceLightmap(m->surfaces + i);
 			BuildSurfaceDisplayList(m, m->surfaces + i);
 		}
 

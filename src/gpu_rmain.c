@@ -656,7 +656,7 @@ void R_ShutdownTextures(void)
 
 int R_Init(void)
 {
-	GL_Texture_Init();
+	R_Texture_Init();
 
 	if (!R_InitTextures())
 		return 0;
@@ -707,7 +707,7 @@ void R_Shutdown(void)
 	World_Shutdown();
 	R_ShutdownParticles();
 	R_ShutdownTextures();
-	GL_Texture_Shutdown();
+	R_Texture_Shutdown();
 }
 
 void R_PreMapLoad(void)
@@ -733,7 +733,7 @@ void R_NewMap(void)
 	r_viewleaf = NULL;
 	R_ClearParticles();
 
-	GL_BuildLightmaps();
+	R_BuildLightmaps();
 
 	for (i = 0; i < cl.worldmodel->numtextures; i++)
 	{
