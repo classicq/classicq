@@ -1207,8 +1207,17 @@ void GPU_EndFrame(void)
 		{
 			frames++;
 			// -testrestart exercises vid_restart mid-run
-			if (frames == 200 && COM_CheckParm("-testrestart"))
-				Cbuf_AddText("vid_restart\n");
+			if (COM_CheckParm("-testrestart"))
+			{
+				if (frames == 150)
+					Cbuf_AddText("menu_video\n");
+				if (frames == 200)
+					Cbuf_AddText("vid_fullscreen 0\nvid_width 1280\nvid_height 720\nvid_restart\n");
+				if (frames == 300)
+					Cbuf_AddText("vid_fullscreen 1\nvid_mode \"\"\nvid_restart\n");
+				if (frames == 380)
+					Cbuf_AddText("vid_fullscreen 0\nvid_width 1600\nvid_height 900\nvid_restart\n");
+			}
 			if (frames == shotframe)
 				Cbuf_AddText("screenshot autoshot\n");
 			if (frames == shotframe + 10)

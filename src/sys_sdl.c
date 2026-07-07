@@ -296,9 +296,61 @@ void Sys_FreePathString(const char *p)
 	free((void *)p);
 }
 
+#if defined(_WIN32)
+#include <tlhelp32.h>
+
+// writes crash.txt next to the executable with the fault offset and module map
+static LONG WINAPI Sys_CrashHandler(EXCEPTION_POINTERS *info)
+{
+	FILE *f;
+	HANDLE snap;
+	MODULEENTRY32 me;
+	void *stack[32];
+	unsigned short n, i;
+	void *addr = info->ExceptionRecord->ExceptionAddress;
+	char *base = (char *)GetModuleHandleA(NULL);
+
+	f = fopen("crash.txt", "w");
+	if (!f)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	fprintf(f, "exception 0x%08lx at %p, exe base %p, offset 0x%llx\n\n",
+		info->ExceptionRecord->ExceptionCode, addr, base,
+		(unsigned long long)((char *)addr - base));
+
+	n = CaptureStackBackTrace(0, 32, stack, NULL);
+	for (i = 0; i < n; i++)
+		fprintf(f, "%2u: %p (exe offset 0x%llx)\n", i, stack[i],
+			(unsigned long long)((char *)stack[i] - base));
+
+	snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
+	if (snap != INVALID_HANDLE_VALUE)
+	{
+		fprintf(f, "\nmodules:\n");
+		me.dwSize = sizeof(me);
+		if (Module32First(snap, &me))
+		{
+			do
+			{
+				fprintf(f, "%p - %p %s\n", (void *)me.modBaseAddr,
+					(void *)(me.modBaseAddr + me.modBaseSize), me.szModule);
+			} while (Module32Next(snap, &me));
+		}
+		CloseHandle(snap);
+	}
+
+	fclose(f);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	double newtime, oldtime;
+
+#if defined(_WIN32)
+	SetUnhandledExceptionFilter(Sys_CrashHandler);
+#endif
 
 	SDL_SetMainReady();
 
