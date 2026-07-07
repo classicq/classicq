@@ -251,6 +251,8 @@ int Sys_Video_Init(void)
 
 void Sys_Video_Shutdown(void)
 {
+	GPU_ShutdownAll();
+
 	if (SDL_WasInit(SDL_INIT_VIDEO))
 		SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }

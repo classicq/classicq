@@ -480,101 +480,138 @@ void GPU_SetVsync(int vsync)
 	SDL_SetGPUSwapchainParameters(gpu_device, gpu_window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode);
 }
 
+// post pipeline targets the swapchain format, which can change with the window
+static int rebuild_post_pipeline(void)
+{
+	SDL_GPUShader *post_vs, *post_fs;
+
+	if (pipe_post)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_post);
+
+	post_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(post_vert), 0, 0);
+	post_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(post_frag), 1, 1);
+	pipe_post = (post_vs && post_fs) ? make_post_pipeline(post_vs, post_fs) : NULL;
+	if (post_vs)
+		SDL_ReleaseGPUShader(gpu_device, post_vs);
+	if (post_fs)
+		SDL_ReleaseGPUShader(gpu_device, post_fs);
+
+	return pipe_post != NULL;
+}
+
+// device, pipelines and shared buffers live for the whole process;
+// vid_restart only cycles the window, the swapchain and the texture table
 int GPU_Init(SDL_Window *window, int vsync)
 {
 	SDL_GPUBufferCreateInfo bci;
 	SDL_GPUTransferBufferCreateInfo tci;
+	SDL_GPUTextureFormat newformat;
+	int created = 0;
 
-	gpu_device = SDL_CreateGPUDevice(
-		SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
-		COM_CheckParm("-gpudebug") != 0,
-		NULL);
 	if (!gpu_device)
 	{
-		Com_Printf("SDL_CreateGPUDevice failed: %s\n", SDL_GetError());
-		return 0;
+		gpu_device = SDL_CreateGPUDevice(
+			SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL,
+			COM_CheckParm("-gpudebug") != 0,
+			NULL);
+		if (!gpu_device)
+		{
+			Com_Printf("SDL_CreateGPUDevice failed: %s\n", SDL_GetError());
+			return 0;
+		}
+		created = 1;
 	}
 
 	if (!SDL_ClaimWindowForGPUDevice(gpu_device, window))
 	{
 		Com_Printf("SDL_ClaimWindowForGPUDevice failed: %s\n", SDL_GetError());
-		SDL_DestroyGPUDevice(gpu_device);
-		gpu_device = NULL;
+		if (created)
+			GPU_ShutdownAll();
 		return 0;
 	}
 
 	gpu_window = window;
-	swapchain_format = SDL_GetGPUSwapchainTextureFormat(gpu_device, gpu_window);
+	newformat = SDL_GetGPUSwapchainTextureFormat(gpu_device, gpu_window);
 
-	if (SDL_GPUTextureSupportsFormat(gpu_device, SDL_GPU_TEXTUREFORMAT_D24_UNORM,
-		SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
-		scene_depth_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
-	else
-		scene_depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-
-	samp_nearest = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
-	samp_linear = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
-	samp_nearest_clamp = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
-	samp_linear_clamp = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
-
-	memset(&bci, 0, sizeof(bci));
-	bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-	bci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
-	ui_vbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
-
-	memset(&tci, 0, sizeof(tci));
-	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-	tci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
-	ui_tbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
-
-	memset(&bci, 0, sizeof(bci));
-	bci.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-	bci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
-	scene_ibuf = SDL_CreateGPUBuffer(gpu_device, &bci);
-
-	memset(&tci, 0, sizeof(tci));
-	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-	tci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
-	scene_itbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
-
-	memset(&bci, 0, sizeof(bci));
-	bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-	bci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
-	scene_dynvbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
-
-	memset(&tci, 0, sizeof(tci));
-	tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-	tci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
-	scene_dyntbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
-
-	if (!scene_ibuf || !scene_itbuf || !scene_dynvbuf || !scene_dyntbuf)
+	if (created)
 	{
-		Com_Printf("GPU: scene buffer creation failed: %s\n", SDL_GetError());
-		GPU_Shutdown();
-		return 0;
+		swapchain_format = newformat;
+
+		if (SDL_GPUTextureSupportsFormat(gpu_device, SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+			SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
+			scene_depth_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+		else
+			scene_depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+
+		samp_nearest = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+		samp_linear = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+		samp_nearest_clamp = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+		samp_linear_clamp = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+
+		memset(&bci, 0, sizeof(bci));
+		bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+		bci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
+		ui_vbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+		memset(&tci, 0, sizeof(tci));
+		tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+		tci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
+		ui_tbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+		memset(&bci, 0, sizeof(bci));
+		bci.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+		bci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
+		scene_ibuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+		memset(&tci, 0, sizeof(tci));
+		tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+		tci.size = GPU_SCENE_MAX_INDICES * sizeof(unsigned int);
+		scene_itbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+		memset(&bci, 0, sizeof(bci));
+		bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+		bci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
+		scene_dynvbuf = SDL_CreateGPUBuffer(gpu_device, &bci);
+
+		memset(&tci, 0, sizeof(tci));
+		tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+		tci.size = GPU_SCENE_MAX_DYNVERTS * sizeof(scene_vert_t);
+		scene_dyntbuf = SDL_CreateGPUTransferBuffer(gpu_device, &tci);
+
+		if (!scene_ibuf || !scene_itbuf || !scene_dynvbuf || !scene_dyntbuf
+			|| !samp_nearest || !samp_linear || !samp_nearest_clamp || !samp_linear_clamp
+			|| !ui_vbuf || !ui_tbuf)
+		{
+			Com_Printf("GPU: resource creation failed: %s\n", SDL_GetError());
+			GPU_ShutdownAll();
+			return 0;
+		}
+
+		if (!create_pipelines())
+		{
+			GPU_ShutdownAll();
+			return 0;
+		}
+
+		Com_Printf("GPU driver: %s\n", SDL_GetGPUDeviceDriver(gpu_device));
 	}
-
-	if (!samp_nearest || !samp_linear || !samp_nearest_clamp || !samp_linear_clamp || !ui_vbuf || !ui_tbuf)
+	else if (newformat != swapchain_format)
 	{
-		Com_Printf("GPU: resource creation failed: %s\n", SDL_GetError());
-		GPU_Shutdown();
-		return 0;
-	}
-
-	if (!create_pipelines())
-	{
-		GPU_Shutdown();
-		return 0;
+		swapchain_format = newformat;
+		if (!rebuild_post_pipeline())
+		{
+			Com_Printf("GPU: post pipeline rebuild failed: %s\n", SDL_GetError());
+			return 0;
+		}
 	}
 
 	GPU_Texture_InitTable();
 	GPU_SetVsync(vsync);
 
-	Com_Printf("GPU driver: %s\n", SDL_GetGPUDeviceDriver(gpu_device));
-
 	return 1;
 }
 
+// releases everything tied to the current window, keeps the device alive
 void GPU_Shutdown(void)
 {
 	if (!gpu_device)
@@ -589,6 +626,28 @@ void GPU_Shutdown(void)
 	SDL_WaitForGPUIdle(gpu_device);
 
 	GPU_Texture_ShutdownTable();
+
+	if (readback_buffer)
+	{
+		SDL_ReleaseGPUTransferBuffer(gpu_device, readback_buffer);
+		readback_buffer = NULL;
+		readback_size = 0;
+	}
+	destroy_scene_targets();
+
+	if (gpu_window)
+	{
+		SDL_ReleaseWindowFromGPUDevice(gpu_device, gpu_window);
+		gpu_window = NULL;
+	}
+}
+
+void GPU_ShutdownAll(void)
+{
+	if (!gpu_device)
+		return;
+
+	GPU_Shutdown();
 
 	if (pipe_ui)
 		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_ui);
@@ -639,19 +698,8 @@ void GPU_Shutdown(void)
 	ui_vbuf = NULL;
 	ui_tbuf = NULL;
 
-	if (readback_buffer)
-	{
-		SDL_ReleaseGPUTransferBuffer(gpu_device, readback_buffer);
-		readback_buffer = NULL;
-		readback_size = 0;
-	}
-	destroy_scene_targets();
-
-	if (gpu_window)
-		SDL_ReleaseWindowFromGPUDevice(gpu_device, gpu_window);
 	SDL_DestroyGPUDevice(gpu_device);
 	gpu_device = NULL;
-	gpu_window = NULL;
 }
 
 void GPU_BeginFrame(unsigned int width, unsigned int height)
