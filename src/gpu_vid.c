@@ -465,7 +465,7 @@ static int create_scene_targets(unsigned int width, unsigned int height)
 	return 1;
 }
 
-static void GPU_SetVsync(int vsync)
+void GPU_SetVsync(int vsync)
 {
 	SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_VSYNC;
 
@@ -1206,6 +1206,9 @@ void GPU_EndFrame(void)
 		if (shotframe)
 		{
 			frames++;
+			// -testrestart exercises vid_restart mid-run
+			if (frames == 200 && COM_CheckParm("-testrestart"))
+				Cbuf_AddText("vid_restart\n");
 			if (frames == shotframe)
 				Cbuf_AddText("screenshot autoshot\n");
 			if (frames == shotframe + 10)

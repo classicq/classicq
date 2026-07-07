@@ -32,7 +32,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define KEYQ_SIZE 256
 
-static cvar_t vid_vsync = { "vid_vsync", "0", CVAR_ARCHIVE };
+static qboolean OnChange_vid_vsync(cvar_t *var, char *string)
+{
+	var->value = Q_atof(string);
+	GPU_SetVsync((int)var->value);
+	return false;
+}
+
+static cvar_t vid_vsync = { "vid_vsync", "0", CVAR_ARCHIVE, OnChange_vid_vsync };
 
 struct sdldisplay
 {

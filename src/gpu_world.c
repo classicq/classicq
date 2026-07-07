@@ -124,6 +124,31 @@ static float brush_mvp[16];
 static const float *current_mvp = r_viewproj;
 static worldvb_t *current_vb;
 
+// drops all world GPU objects; also runs on vid_restart while the old device is alive
+void World_Shutdown(void)
+{
+	int i;
+
+	for (i = 0; i < num_worldvbs; i++)
+	{
+		GPU_ReleaseBuffer(worldvbs[i].buf);
+		free(worldvbs[i].verts);
+	}
+	memset(worldvbs, 0, sizeof(worldvbs));
+	num_worldvbs = 0;
+	current_vb = NULL;
+
+	for (i = 0; i < MAX_LIGHTMAPS; i++)
+	{
+		if (lightmap_pages[i])
+		{
+			GPU_ReleaseTexture(lightmap_pages[i]);
+			lightmap_pages[i] = NULL;
+		}
+		lightmap_modified[i] = false;
+	}
+}
+
 // triangle fan over a contiguous vertex range, returns index count
 static unsigned int Fan_AllocIndices(unsigned int firstvert, int numverts, unsigned int *firstindex)
 {
@@ -2445,24 +2470,7 @@ void GL_BuildLightmaps(void)
 
 	r_framecount = 1;		// no dlightcache
 
-	// drop buffers and pages from the previous map
-	for (i = 0; i < num_worldvbs; i++)
-	{
-		GPU_ReleaseBuffer(worldvbs[i].buf);
-		free(worldvbs[i].verts);
-	}
-	memset(worldvbs, 0, sizeof(worldvbs));
-	num_worldvbs = 0;
-
-	for (i = 0; i < MAX_LIGHTMAPS; i++)
-	{
-		if (lightmap_pages[i])
-		{
-			GPU_ReleaseTexture(lightmap_pages[i]);
-			lightmap_pages[i] = NULL;
-		}
-		lightmap_modified[i] = false;
-	}
+	World_Shutdown();
 
 	for (j = 1; j < MAX_MODELS; j++)
 	{

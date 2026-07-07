@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 int GPU_Init(SDL_Window *window, int vsync);
 void GPU_Shutdown(void);
+void GPU_SetVsync(int vsync);
 
 void GPU_BeginFrame(unsigned int width, unsigned int height);
 void GPU_EndFrame(void);

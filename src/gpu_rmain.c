@@ -704,6 +704,7 @@ void R_TimeRefresh_f(void)
 
 void R_Shutdown(void)
 {
+	World_Shutdown();
 	R_ShutdownParticles();
 	R_ShutdownTextures();
 	GL_Texture_Shutdown();

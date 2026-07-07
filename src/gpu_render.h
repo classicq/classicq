@@ -36,6 +36,7 @@ extern float r_viewproj[16];
 // lightmap uploads hook target, implemented in gpu_world.c
 struct SDL_GPUCopyPass;
 void World_UploadLightmaps(struct SDL_GPUCopyPass *copy);
+void World_Shutdown(void);
 
 // gpu_alias.c
 void R_DrawAliasModel(entity_t *ent);
