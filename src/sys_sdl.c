@@ -298,15 +298,44 @@ void Sys_FreePathString(const char *p)
 
 #if defined(_WIN32)
 #include <tlhelp32.h>
+#include <dbghelp.h>
 
-// writes crash.txt next to the executable with the fault offset and module map
+static void Sys_CrashPrintAddr(FILE *f, HANDLE proc, DWORD64 addr)
+{
+	char symbuf[sizeof(SYMBOL_INFO) + 256];
+	SYMBOL_INFO *sym = (SYMBOL_INFO *)symbuf;
+	IMAGEHLP_LINE64 line;
+	DWORD64 disp64 = 0;
+	DWORD disp32 = 0;
+	char *base = (char *)GetModuleHandleA(NULL);
+
+	fprintf(f, "%p (exe offset 0x%llx)", (void *)addr,
+		(unsigned long long)((char *)addr - base));
+
+	memset(symbuf, 0, sizeof(symbuf));
+	sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+	sym->MaxNameLen = 255;
+	if (SymFromAddr(proc, addr, &disp64, sym))
+		fprintf(f, " %s+0x%llx", sym->Name, (unsigned long long)disp64);
+
+	memset(&line, 0, sizeof(line));
+	line.SizeOfStruct = sizeof(line);
+	if (SymGetLineFromAddr64(proc, addr, &disp32, &line))
+		fprintf(f, " [%s:%lu]", line.FileName, line.LineNumber);
+
+	fprintf(f, "\n");
+}
+
+// writes crash.txt next to the executable: symbolized stack and module map
 static LONG WINAPI Sys_CrashHandler(EXCEPTION_POINTERS *info)
 {
 	FILE *f;
 	HANDLE snap;
+	HANDLE proc = GetCurrentProcess();
 	MODULEENTRY32 me;
-	void *stack[32];
-	unsigned short n, i;
+	CONTEXT ctx;
+	STACKFRAME64 frame;
+	int i;
 	void *addr = info->ExceptionRecord->ExceptionAddress;
 	char *base = (char *)GetModuleHandleA(NULL);
 
@@ -314,14 +343,32 @@ static LONG WINAPI Sys_CrashHandler(EXCEPTION_POINTERS *info)
 	if (!f)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	fprintf(f, "exception 0x%08lx at %p, exe base %p, offset 0x%llx\n\n",
-		info->ExceptionRecord->ExceptionCode, addr, base,
-		(unsigned long long)((char *)addr - base));
+	SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+	SymInitialize(proc, NULL, TRUE);
 
-	n = CaptureStackBackTrace(0, 32, stack, NULL);
-	for (i = 0; i < n; i++)
-		fprintf(f, "%2u: %p (exe offset 0x%llx)\n", i, stack[i],
-			(unsigned long long)((char *)stack[i] - base));
+	fprintf(f, "exception 0x%08lx at ", info->ExceptionRecord->ExceptionCode);
+	Sys_CrashPrintAddr(f, proc, (DWORD64)addr);
+	fprintf(f, "exe base %p\n\nstack:\n", base);
+
+	ctx = *info->ContextRecord;
+	memset(&frame, 0, sizeof(frame));
+	frame.AddrPC.Offset = ctx.Rip;
+	frame.AddrPC.Mode = AddrModeFlat;
+	frame.AddrFrame.Offset = ctx.Rbp;
+	frame.AddrFrame.Mode = AddrModeFlat;
+	frame.AddrStack.Offset = ctx.Rsp;
+	frame.AddrStack.Mode = AddrModeFlat;
+
+	for (i = 0; i < 32; i++)
+	{
+		if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, proc, GetCurrentThread(),
+			&frame, &ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+			break;
+		if (!frame.AddrPC.Offset)
+			break;
+		fprintf(f, "%2d: ", i);
+		Sys_CrashPrintAddr(f, proc, frame.AddrPC.Offset);
+	}
 
 	snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
 	if (snap != INVALID_HANDLE_VALUE)

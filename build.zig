@@ -92,6 +92,7 @@ pub fn build(b: *std.Build) void {
             root_mod.linkSystemLibrary("winmm", .{});
             root_mod.linkSystemLibrary("gdi32", .{});
             root_mod.linkSystemLibrary("bcrypt", .{});
+            root_mod.linkSystemLibrary("dbghelp", .{});
             // app icon: RC writes basename, include path resolves at compile time
             root_mod.addWin32ResourceFile(.{
                 .file = b.path("src/classicq.rc"),
@@ -151,6 +152,9 @@ pub fn build(b: *std.Build) void {
                 else => "assets/classicq",
             };
             install_to_assets.addCopyFileToSource(exe.getEmittedBin(), bin_name);
+            // crash handler symbolizes through the pdb sitting next to the exe
+            if (os_tag == .windows and optimize == .Debug)
+                install_to_assets.addCopyFileToSource(exe.getEmittedPdb(), "assets/classicq.pdb");
         },
     }
     b.getInstallStep().dependOn(&install_to_assets.step);
