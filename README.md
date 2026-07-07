@@ -1,4 +1,4 @@
-![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
+![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black) ![SDL3](https://img.shields.io/badge/SDL-3-1E4E79) ![Vulkan](https://img.shields.io/badge/Vulkan-A41E22?logo=vulkan&logoColor=white) ![Direct3D 12](https://img.shields.io/badge/Direct3D_12-107C10) ![Metal](https://img.shields.io/badge/Metal-8A8A8E?logo=apple&logoColor=white)
 
 # classicQ
 
