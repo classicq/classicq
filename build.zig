@@ -49,7 +49,6 @@ pub fn build(b: *std.Build) void {
         "-D_GNU_SOURCE",
         "-DCLIENTONLY",
         "-DNETQW",
-        "-DGLQUAKE",
         "-DUSE_PNG=1",
         "-DUSE_JPEG=0",
         "-DUSE_ZLIB=1",

@@ -26,17 +26,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "filesystem.h"
 #endif
 
-#ifdef GLQUAKE
 
 #include "gl_local.h"
 
 #include "particles.h"
 
-#else			//software
-
-#include "r_local.h"
-
-#endif
 
 #define DEFAULT_NUM_PARTICLES	2048
 #define ABSOLUTE_MIN_PARTICLES	512
@@ -50,7 +44,6 @@ static particle_t	*particles, *active_particles, *free_particles;
 
 static int			r_numparticles;
 
-#ifdef GLQUAKE
 void Classic_LoadParticleTextures (void)
 {
 	int	i, x, y;
@@ -75,7 +68,6 @@ void Classic_LoadParticleTextures (void)
 
 	GL_Upload32 ((unsigned int*) data, 32, 32, TEX_MIPMAP | TEX_ALPHA | TEX_NOSCALE);
 }
-#endif
 
 static int Classic_InitParticles(void)
 {
@@ -475,11 +467,7 @@ static void Classic_DrawParticles(void)
 	if (!active_particles)
 		return;
 
-#ifdef GLQUAKE
 	GL_DrawParticleBegin();
-#else
-	D_DrawParticleBegin();
-#endif
 
 	frametime = cls.frametime;
 	if (cl.paused)
@@ -518,11 +506,7 @@ static void Classic_DrawParticles(void)
 			break;
 		}
 
-#ifdef GLQUAKE
 		GL_DrawParticle(p);
-#else
-		D_DrawParticle(p);
-#endif
 
 		p->org[0] += p->vel[0] * frametime;
 		p->org[1] += p->vel[1] * frametime;
@@ -583,9 +567,7 @@ static void Classic_DrawParticles(void)
 		}
 	}
 
-#ifdef GLQUAKE
 	GL_DrawParticleEnd();
-#endif
 }
 
 
@@ -594,11 +576,9 @@ int R_InitParticles(void)
 {
 	if (Classic_InitParticles())
 	{
-#ifdef GLQUAKE
 		QMB_InitParticles();
 
 		GL_DrawParticleInit();
-#endif
 
 		return 1;
 	}
@@ -608,26 +588,20 @@ int R_InitParticles(void)
 
 void R_ShutdownParticles()
 {
-#ifdef GLQUAKE
 	QMB_ShutdownParticles();
-#endif
 	Classic_ShutdownParticles();
 }
 
 void R_ClearParticles(void)
 {
 	Classic_ClearParticles();
-#ifdef GLQUAKE
 	QMB_ClearParticles();
-#endif
 }
 
 void R_DrawParticles(void)
 {
 	Classic_DrawParticles();
-#ifdef GLQUAKE
 	QMB_DrawParticles();
-#endif
 }
 
 #define RunParticleEffect(var, org, dir, color, count)		\
@@ -638,11 +612,6 @@ void R_DrawParticles(void)
 
 void R_RunParticleEffect(const vec3_t org, const vec3_t dir, int color, int count)
 {
-	#ifndef GLQUAKE
-
-	Classic_RunParticleEffect(org, dir, color, count);
-
-	#else
 
 	if (color == 73 || color == 225)
 	{
@@ -661,20 +630,16 @@ void R_RunParticleEffect(const vec3_t org, const vec3_t dir, int color, int coun
 		RunParticleEffect(gunshots, org, dir, color, count);
 	}
 
-	#endif
 }
 
 void R_ParticleTrail (vec3_t start, vec3_t end, vec3_t *trail_origin, trail_type_t type)
 {
-#ifdef GLQUAKE
 	if (qmb_initialized && gl_part_trails.value)
 		QMB_ParticleTrail(start, end, trail_origin, type);
 	else
-#endif
 		Classic_ParticleTrail(start, end, trail_origin, type);
 }
 
-#ifdef GLQUAKE
 #define ParticleFunction(var, name)				\
 void R_##name (vec3_t org) {					\
 	if (qmb_initialized && gl_part_##var.value)	\
@@ -682,12 +647,6 @@ void R_##name (vec3_t org) {					\
 	else										\
 		Classic_##name(org);					\
 }
-#else
-#define ParticleFunction(var, name)	\
-void R_##name (vec3_t org) {		\
-	Classic_##name(org);			\
-}
-#endif
 
 ParticleFunction(explosions, ParticleExplosion);
 ParticleFunction(blobs, BlobExplosion);

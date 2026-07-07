@@ -57,9 +57,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "tokenize_string.h"
 #include "lua.h"
 
-#ifndef GLQUAKE
-#include "d_local.h"
-#endif
 
 #ifdef FOD_PPC
 int altivec_available;
@@ -182,11 +179,7 @@ unsigned int cl_dlight_active[MAX_DLIGHTS/32];
 static float draw_flat[3][3];
 
 // refresh list
-#ifdef GLQUAKE
 visentlist_t	cl_firstpassents, cl_visents, cl_alphaents;
-#else
-visentlist_t	cl_visents, cl_visbents;
-#endif
 
 double		connect_time = 0;		// for connection retransmits
 
@@ -325,20 +318,6 @@ static int Point_On_Surface(vec3_t *points, int count, vec3_t point)
 
 static qboolean r_drawflat_enable_callback(cvar_t *var, char *string)
 {
-#ifndef GLQUAKE
-	model_t *model;
-	unsigned int i;
-
-	model = cl.worldmodel;
-
-	if (model)
-	{
-		for (i=0;i<model->numsurfaces;i++)
-		{
-			D_UncacheSurface(&model->surfaces[i]);
-		}
-	}
-#endif
 
 	return false;
 }
@@ -490,7 +469,6 @@ static qboolean r_drawflat_slopes_callback(cvar_t *var, char *string)
 
 static void R_DrawFlat_UpdateSurface(model_t *model, msurface_t *surface)
 {
-#ifdef GLQUAKE
 	unsigned int i;
 
 	if (model->vertcolours)
@@ -507,11 +485,6 @@ static void R_DrawFlat_UpdateSurface(model_t *model, msurface_t *surface)
 			model->surface_colours_dirty = 1;
 		}
 	}
-#else
-	surface->palcolor = V_LookUpColour(surface->color[0], surface->color[1], surface->color[2]);
-	if (r_drawflat_enable.value == 1)
-		D_UncacheSurface(surface);
-#endif
 }
 
 static void R_DrawFlatShoot_f(void)

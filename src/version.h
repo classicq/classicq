@@ -48,11 +48,7 @@
 #define QW_ARCH "unknown"
 #endif
 
-#ifdef GLQUAKE
 #define QW_RENDERER "GL"
-#else
-#define QW_RENDERER "Soft"
-#endif
 
 void CL_Version_f (void);
 char *VersionString (void);

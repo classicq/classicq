@@ -515,11 +515,7 @@ static void draw_graph(struct hud_item *self)
 		else
 			y2 = self->height * (entry_1->value/h);
 
-#ifdef GLQUAKE
 		Draw_Line_RGBA(self->real_x + x1, self->real_y + self->height - y1, self->real_x  + x2, self->real_y + self->height - y2, 1, self->graph_color[0], self->graph_color[1], self->graph_color[2], 1);
-#else
-		Draw_Line(self->real_x + x1, self->real_y + self->height - y1, self->real_x  + x2, self->real_y + self->height - y2, 1, self->graph_color_software & 0xFF);
-#endif
 	}
 }
 
@@ -872,9 +868,7 @@ static void draw_progress_bar(struct hud_item *self)
 
 
 		
-#ifdef GLQUAKE
 	Draw_Line_RGBA(x1, y1, x2, y2, t, 1, 1, 1, 1);
-#endif
 
 }
 

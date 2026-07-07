@@ -420,11 +420,7 @@ typedef struct visentlist_s {
 	int			alpha;
 } visentlist_t;
 
-#ifdef GLQUAKE
 extern visentlist_t cl_firstpassents, cl_visents, cl_alphaents;
-#else
-extern visentlist_t cl_visents, cl_visbents;
-#endif
 
 // FuhQuake cvars
 extern cvar_t cl_floodprot;			

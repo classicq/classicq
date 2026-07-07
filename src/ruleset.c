@@ -95,15 +95,9 @@ static const struct ruleset ruleset_default =
 
 static void Ruleset_EQL_Init()
 {
-#ifndef GLQUAKE
-	extern cvar_t r_aliasstats;
-#endif
 	extern cvar_t cl_imitate_client;
 	extern cvar_t cl_imitate_os;
 
-#ifndef GLQUAKE
-	Cvar_Set(&r_aliasstats, "0");
-#endif
 	Cvar_Set(&cl_imitate_client, "none");
 	Cvar_Set(&cl_imitate_os, "none");
 }

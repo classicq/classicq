@@ -32,9 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 static qboolean OnChange_movie_dir(cvar_t *var, char *string);
 int SCR_Screenshot(char *);
 
-#ifdef GLQUAKE
 	extern cvar_t scr_sshot_type;
-#endif
 
 cvar_t   movie_fps			=  {"demo_capture_fps", "30.0"};
 cvar_t   movie_dir			=  {"demo_capture_dir",  "capture", 0, OnChange_movie_dir};
@@ -69,11 +67,7 @@ static void Movie_Start(double _time) {
 	movie_start_time = cls.realtime;
 
 	movie_frame_count = 0;
-#ifdef GLQUAKE
 	strcpy(image_ext, "tga");
-#else
-	strcpy(image_ext, "pcx");
-#endif
 }
 
 void Movie_Stop (void) {

@@ -57,7 +57,6 @@ cvar_t	image_jpeg_quality_level = {"image_jpeg_quality_level", "100"};
 
 /***************************** IMAGE RESAMPLING ******************************/
 
-#ifdef GLQUAKE
 
 static void Image_Resample32LerpLine (byte *in, byte *out, int inwidth, int outwidth)
 {
@@ -503,7 +502,6 @@ void Image_MipReduce (byte *in, byte *out, int *width, int *height, int bpp)
 	}
 }
 
-#endif
 
 /************************************ PNG ************************************/
 
@@ -1070,15 +1068,9 @@ int Image_WritePNG (char *filename, int compression, byte *pixels, int width, in
 }
 
 int Image_WritePNGPLTE (char *filename, int compression,
-#ifdef GLQUAKE
 	byte *pixels, int width, int height, byte *palette)
-#else
-	byte *pixels, int width, int height, int rowbytes, byte *palette)
-#endif
 {
-#ifdef GLQUAKE
 	int rowbytes = width;
-#endif
 	int i;
 	char name[MAX_OSPATH];
 	FILE *fp;
@@ -1809,15 +1801,9 @@ byte *Image_LoadPCX(FILE *fin, char *filename, int matchwidth, int matchheight, 
 	return data;
 }
 
-#ifdef GLQUAKE
 int Image_WritePCX (char *filename, byte *data, int width, int height, byte *palette)
-#else
-int Image_WritePCX (char *filename, byte *data, int width, int height, int rowbytes, byte *palette)
-#endif
 {
-#ifdef GLQUAKE
 	int rowbytes = width;
-#endif
 	int i, j, length;
 	byte *pack;
 	pcx_t *pcx;

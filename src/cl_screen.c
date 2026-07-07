@@ -41,27 +41,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "server_browser.h"
 #include "lua.h"
 
-#ifdef GLQUAKE
 #include "gl_local.h"
 #include "gl_framebuffer.h"
 #include "gl_post_process.h"
 #include "gpu_local.h"
-#else
-#include "r_local.h"
-#endif
 
-#ifdef GLQUAKE
 int				glx, gly, glwidth, glheight;
-#endif
 
 #if USE_PNG
 #define			DEFAULT_SSHOT_FORMAT		"png"
 #else
-#ifdef GLQUAKE
 #define			DEFAULT_SSHOT_FORMAT		"tga"
-#else
-#define			DEFAULT_SSHOT_FORMAT		"pcx"
-#endif
 #endif
 
 char *COM_FileExtension (char *in);
@@ -123,9 +113,7 @@ cvar_t			show_framestddev_y = {"show_framestddev_y", "-2"};
 cvar_t			scr_sshot_format		= {"sshot_format", DEFAULT_SSHOT_FORMAT};
 cvar_t			scr_sshot_dir			= {"sshot_dir", ""};
 
-#ifdef GLQUAKE
 cvar_t			gl_triplebuffer = {"gl_triplebuffer", "1", CVAR_ARCHIVE};
-#endif
 
 cvar_t			scr_autoid		= {"scr_autoid", "0"};
 cvar_t			scr_coloredText = {"scr_coloredText", "0"};
@@ -329,12 +317,8 @@ static void CalcFov(float fov, float *fov_x, float *fov_y, float width, float he
 static void SCR_CalcRefdef (void)
 {
 	float size;
-#ifdef GLQUAKE
 	int h;
 	qboolean full = false;
-#else
-	vrect_t vrect;
-#endif
 
 	scr_fullupdate = 0;             // force a background redraw
 	vid.recalc_refdef = 0;
@@ -364,7 +348,6 @@ static void SCR_CalcRefdef (void)
 	else
 		sb_lines = 24 + 16 + 8;
 
-#ifdef GLQUAKE
 
 	if (scr_viewsize.value >= 100.0)
 	{
@@ -417,26 +400,6 @@ static void SCR_CalcRefdef (void)
 	scr_vrect = r_refdef.vrect;
 
 	Draw_SizeChanged();
-#else
-
-	CalcFov(scr_fov.value, &r_refdef.fov_x, &r_refdef.fov_y, r_refdef.vrect.width, r_refdef.vrect.height);
-
-#warning No idea of the below lines are correct.
-	// these calculations mirror those in R_Init() for r_refdef, but take noaccount of water warping
-	vrect.x = 0;
-	vrect.y = 0;
-	vrect.width = vid.displaywidth;
-	vrect.height = vid.displayheight;
-
-	R_SetVrect (&vrect, &scr_vrect, sb_lines);
-
-	// guard against going from one mode to another that's less than half the vertical resolution
-	scr_con_current = min(scr_con_current, vid.conheight);
-
-	// notify the refresh of the change
-	R_ViewChanged (&vrect, sb_lines, vid.aspect);
-
-#endif
 }
 
 //Keybinding command
@@ -790,35 +753,16 @@ void SCR_SetUpToDrawConsole(void)
 
 	if (clearconsole++ < vid.numpages)
 	{
-#ifndef GLQUAKE
-		scr_copytop = 1;
-		Draw_TileClear (0, (int) scr_con_current, vid.conwidth, vid.conheight - (int) scr_con_current);
-#endif
 		Sbar_Changed ();
 	}
 	else if (clearnotify++ < vid.numpages)
 	{
-#ifndef GLQUAKE
-		scr_copytop = 1;
-		Draw_TileClear(0, 0, vid.conwidth, scr_clearnotifylines * 8);
-#endif
 	}
 	else
 	{
 		scr_clearnotifylines = 0;
 	}
 
-#ifndef GLQUAKE
-	{
-		extern cvar_t scr_conalpha;
-
-		if (!scr_conalpha.value && scr_con_current)
-		{
-
-			Draw_TileClear(0, 0, vid.conwidth, scr_con_current);
-		}
-	}
-#endif
 }
 
 static void SCR_DrawDownload(unsigned int vislines)
@@ -1000,7 +944,6 @@ static void Con_MessageMode2_f (void)
 
 /*********************************** AUTOID ***********************************/
 
-#ifdef GLQUAKE
 
 
 int qglProject (float objx, float objy, float objz, float *model, float *proj, int *view, float* winx, float* winy, float* winz) {
@@ -1118,11 +1061,9 @@ void SCR_DrawAutoID (void) {
 	}
 }
 
-#endif
 
 /********************************* TILE CLEAR *********************************/
 
-#ifdef GLQUAKE
 
 void SCR_TileClear (void) {
 	if (cls.state != ca_active && cl.intermission) {
@@ -1150,40 +1091,6 @@ void SCR_TileClear (void) {
 	}
 }
 
-#else
-
-void SCR_TileClear(void)
-{
-	if (scr_fullupdate++ < vid.numpages)
-	{
-		// clear the entire screen
-		scr_copyeverything = 1;
-		Draw_TileClear (0, 0, vid.conwidth, vid.conheight);
-		Sbar_Changed ();
-	}
-	else
-	{
-		if (scr_viewsize.value < 100)
-		{
-			static const char str[11] = "xxxxxxxxxx";
-			// clear background for counters
-			if (show_speed.value)
-				Draw_TileClear(ELEMENT_X_COORD(show_speed), ELEMENT_Y_COORD(show_speed), 10 * 8, 8);
-			if (show_fps.value)
-				Draw_TileClear(ELEMENT_X_COORD(show_fps), ELEMENT_Y_COORD(show_fps), 10 * 8, 8);
-			if (show_framestddev.value)
-				Draw_TileClear(ELEMENT_X_COORD(show_framestddev), ELEMENT_Y_COORD(show_framestddev), 19 * 8, 8);
-			if (scr_clock.value)
-				Draw_TileClear(ELEMENT_X_COORD(scr_clock), ELEMENT_Y_COORD(scr_clock), 10 * 8, 8);
-			if (scr_gameclock.value)
-				Draw_TileClear(ELEMENT_X_COORD(scr_gameclock), ELEMENT_Y_COORD(scr_gameclock), 10 * 8, 8);
-			if (scr_democlock.value)
-				Draw_TileClear(ELEMENT_X_COORD(scr_clock), ELEMENT_Y_COORD(scr_clock), 10 * 8, 8);
-		}
-	}
-}
-
-#endif
 
 void SCR_DrawElements(void) {
 	if (scr_drawloading) {
@@ -1204,9 +1111,7 @@ void SCR_DrawElements(void) {
 			SCR_DrawNet ();
 			SCR_DrawTurtle ();
 			SCR_DrawPause ();
-#ifdef GLQUAKE
 			SCR_DrawAutoID ();
-#endif
 			if (!cl.intermission) {
 				if (key_dest != key_menu)
 					Draw_Crosshair ();
@@ -1230,7 +1135,6 @@ void SCR_DrawElements(void) {
 
 /******************************* UPDATE SCREEN *******************************/
 
-#ifdef GLQUAKE
 
 //This is called every frame, and can also be called explicitly to flush text to the screen.
 //WARNING: be very careful calling this from elsewhere, because the refresh needs almost the entire 256k of stack space!
@@ -1337,113 +1241,6 @@ void SCR_UpdateScreen (void) {
 	VID_Update(0);
 }
 
-#else
-
-void SCR_UpdateScreen (void) {
-	vrect_t vrect;
-
-	if (!scr_initialized)
-		return;                         // not initialized yet
-
-	if (scr_skipupdate || block_drawing)
-		return;
-
-	if (scr_disabled_for_loading) {
-		if (cls.realtime - scr_disabled_time > 20)
-			scr_disabled_for_loading = false;
-		else
-			return;
-	}
-
-#ifdef _WIN32
-	{	// don't suck up any cpu if minimized
-		extern int Minimized;
-
-		if (Minimized)
-			return;
-	}
-#endif
-
-	scr_copytop = 0;
-	scr_copyeverything = 0;
-
-	// check for vid changes
-	if (oldfov != scr_fov.value) {
-		oldfov = scr_fov.value;
-		vid.recalc_refdef = true;
-	}
-	
-	if (oldscreensize != scr_viewsize.value) {
-		oldscreensize = scr_viewsize.value;
-		vid.recalc_refdef = true;
-	}
-
-	if (oldsbar != cl_sbar.value) {
-		oldsbar = cl_sbar.value;
-		vid.recalc_refdef = true;
-	}
-
-	if (vid.recalc_refdef) {
-		// something changed, so reorder the screen
-		SCR_CalcRefdef ();
-	}
-
-	// do 3D refresh drawing, and then update the screen
-	D_EnableBackBufferAccess ();	// of all overlay stuff if drawing directly
-
-	SCR_TileClear ();
-	SCR_SetUpToDrawConsole ();
-	SCR_EraseCenterString ();
-
-	D_DisableBackBufferAccess ();	// for adapters that can't stay mapped in for linear writes all the time
-
-	VID_LockBuffer ();
-	V_RenderView ();
-	VID_UnlockBuffer ();
-
-	D_EnableBackBufferAccess ();	// of all overlay stuff if drawing directly
-
-	SCR_DrawElements();
-
-	SB_Frame();
-
-	Lua_Frame_2D();
-
-	D_DisableBackBufferAccess ();	// for adapters that can't stay mapped in for linear writes all the time
-	V_UpdatePalette(false);
-
-	// update one of three areas
-	if (scr_copyeverything) {
-		vrect.x = 0;
-		vrect.y = 0;
-		vrect.width = vid.displaywidth;
-		vrect.height = vid.displayheight;
-		vrect.pnext = 0;
-
-		VID_Update (&vrect);
-	} else if (scr_copytop) {
-		vrect.x = 0;
-		vrect.y = 0;
-		vrect.width = vid.displaywidth;
-		vrect.height = vid.displayheight - sb_lines;
-#warning This needs translation from con space to display space
-		vrect.pnext = 0;
-
-		VID_Update (&vrect);
-	} else {
-		vrect.x = scr_vrect.x;
-		vrect.y = scr_vrect.y;
-		vrect.width = scr_vrect.width;
-		vrect.height = scr_vrect.height;
-		vrect.pnext = 0;
-
-		VID_Update (&vrect);
-	}
-
-	SCR_CheckAutoScreenshot();
-}
-
-#endif
 
 void SCR_UpdateWholeScreen (void) {
 	scr_fullupdate = 0;
@@ -1474,13 +1271,8 @@ static image_format_t SShot_FormatForName(char *name) {
 	
 	ext = COM_FileExtension(name);
 
-#ifdef GLQUAKE
 	if (!Q_strcasecmp(ext, "tga"))
 		return IMAGE_TGA;
-#else
-	if (!Q_strcasecmp(ext, "pcx"))
-		return IMAGE_PCX;
-#endif
 
 #if USE_PNG
 	else if (!Q_strcasecmp(ext, "png"))
@@ -1492,13 +1284,8 @@ static image_format_t SShot_FormatForName(char *name) {
 		return IMAGE_JPEG;
 #endif
 
-#ifdef GLQUAKE
 	else if (!Q_strcasecmp(scr_sshot_format.string, "tga"))
 		return IMAGE_TGA;
-#else
-	else if (!Q_strcasecmp(scr_sshot_format.string, "pcx"))
-		return IMAGE_PCX;
-#endif
 
 #if USE_PNG
 	else if (!Q_strcasecmp(scr_sshot_format.string, "png"))
@@ -1513,15 +1300,10 @@ static image_format_t SShot_FormatForName(char *name) {
 #if USE_PNG
 		return IMAGE_PNG;
 #else
-#ifdef GLQUAKE
 		return IMAGE_TGA;
-#else
-		return IMAGE_PCX;
-#endif
 #endif
 }
 
-#ifdef GLQUAKE
 
 extern unsigned short ramps[3][256];
 extern qboolean V_SoftGammaActive(void);
@@ -1640,52 +1422,6 @@ int SCR_Screenshot(char *name) {
 	return success;
 }
 
-#else
-
-int SCR_Screenshot(char *name) {
-	int success;
-	image_format_t format;
-
-	name = (*name == '/') ? name + 1 : name;
-	format = SShot_FormatForName(name);
-	COM_ForceExtension (name, SShot_ExtForFormat(format));
-
-	D_EnableBackBufferAccess ();	// enable direct drawing of console to back buffer
-
-	if (format == IMAGE_PCX)
-	{
-		success = Image_WritePCX (name, vid.buffer, vid.displaywidth, vid.displayheight, vid.rowbytes, current_pal) ? SSHOT_SUCCESS : SSHOT_FAILED;
-	}
-#if USE_PNG
-	else if (format == IMAGE_PNG)
-	{
-		if (QLib_isModuleLoaded(qlib_libpng))
-		{
-			success = Image_WritePNGPLTE(name, image_png_compression_level.value, vid.buffer, vid.displaywidth, vid.displayheight, vid.rowbytes, current_pal) ? SSHOT_SUCCESS : SSHOT_FAILED;
-		}
-		else 
-		{
-			Com_Printf("Can't take a PNG screenshot without libpng.");
-			if (SShot_FormatForName("noext") == IMAGE_PNG)
-				Com_Printf(" Try changing \"%s\" to another image format.", scr_sshot_format.name);
-			Com_Printf("\n");
-
-			success = SSHOT_FAILED_QUIET;
-		}
-	}
-#endif
-	else
-	{
-		Com_Printf("Unsupported screenshot format.\n");
-		success = SSHOT_FAILED_QUIET;
-	}
-
-	D_DisableBackBufferAccess ();	// for adapters that can't stay mapped in for linear writes all the time
-
-	return success;
-}
-
-#endif
 
 void SCR_ScreenShot_f (void) {
 	char name[MAX_OSPATH], ext[4], *filename, *sshot_dir;
@@ -1700,13 +1436,8 @@ void SCR_ScreenShot_f (void) {
 	} else if (Cmd_Argc() == 1) {
 		// find a file name to save it to
 
-#ifdef GLQUAKE
 		if (Q_strcasecmp(scr_sshot_format.string, "tga") == 0)
 			strcpy(ext, "tga");
-#else
-		if (Q_strcasecmp(scr_sshot_format.string, "pcx") == 0)
-			strcpy(ext, "pcx");
-#endif
 
 #if USE_PNG
 		if (!Q_strcasecmp(scr_sshot_format.string, "png"))
@@ -1746,10 +1477,8 @@ void SCR_ScreenShot_f (void) {
 void SCR_RSShot_f (void) { 
 	int success = SSHOT_FAILED;
 	char *filename;
-#ifdef GLQUAKE
 	int width, height;
 	byte *base, *pixels;
-#endif
 
 	if (CL_IsUploading())
 		return;		// already one pending
@@ -1768,7 +1497,6 @@ void SCR_RSShot_f (void) {
 
 	filename = "classicq/temp/__rsshot__";
 
-#ifdef GLQUAKE
 
 	width = 400; height = 300;
 	base = Q_Malloc ((width * height + glwidth * glheight) * 3);
@@ -1791,27 +1519,6 @@ void SCR_RSShot_f (void) {
 sshot_taken:
 	free(base);
 
-#else		//GLQUAKE
-
-	D_EnableBackBufferAccess ();
-
-#if USE_PNG
-	if (QLib_isModuleLoaded(qlib_libpng)) {
-		success = Image_WritePNGPLTE(filename, 9, vid.buffer, vid.displaywidth, vid.displayheight, vid.rowbytes, current_pal)
-			? SSHOT_SUCCESS : SSHOT_FAILED;
-		goto sshot_taken;
-	}
-#endif
-
-	success = Image_WritePCX (filename, vid.buffer, vid.displaywidth, vid.displayheight, vid.rowbytes, current_pal)
-		? SSHOT_SUCCESS : SSHOT_FAILED;
-	goto sshot_taken;
-
-sshot_taken:
-
-	D_DisableBackBufferAccess();
-
-#endif		//GLQUAKE
 
 	if (success == SSHOT_SUCCESS) {
 		Com_Printf ("Sending screenshot to server...\n");
@@ -1872,11 +1579,9 @@ void SCR_CvarInit (void)
 	Cvar_Register (&scr_conspeed);
 	Cvar_Register (&scr_printspeed);
 
-#ifdef GLQUAKE
 #warning Huh? Here?
 	Cvar_SetCurrentGroup(CVAR_GROUP_OPENGL);
 	Cvar_Register (&gl_triplebuffer);
-#endif
 
 	Cvar_SetCurrentGroup(CVAR_GROUP_SCREEN);
 	Cvar_Register (&scr_showram);

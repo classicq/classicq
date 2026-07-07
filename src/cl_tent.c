@@ -28,9 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "sound.h"
 #include "netqw.h"
 
-#ifdef GLQUAKE
 #include "gl_local.h"
-#endif
 
 #define	MAX_BEAMS 32
 typedef struct {
@@ -249,10 +247,8 @@ void CL_ParseTEnt (void) {
 			R_RunParticleEffect (pos, vec3_origin, 0, 20 * 14);		//dbl gunshot
 		} else if (r_explosiontype.value == 6) {
 			R_BlobExplosion (pos);									//blob explosion
-#ifdef GLQUAKE
 		} else if (r_explosiontype.value == 7 && qmb_initialized && gl_part_explosions.value) {
 			QMB_DetpackExplosion (pos);								//detpack explosion
-#endif
 		} else {	//sprite and particles
 			R_ParticleExplosion (pos);								//normal explosion
 		}

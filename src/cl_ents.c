@@ -30,9 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "netqw.h"
 #endif
 
-#ifdef GLQUAKE
 #include "gl_local.h"
-#endif
 
 entity_state_t nullentitystate;
 
@@ -98,7 +96,6 @@ int CL_InitEnts(void)
 			Sys_Error("cl_modelnames[%d] not initialized", i);
 	}
 
-#ifdef GLQUAKE
 	cl_firstpassents.max = 64;
 	cl_firstpassents.alpha = 0;
 
@@ -120,24 +117,6 @@ int CL_InitEnts(void)
 
 		return 0;
 	}
-#else
-	cl_visents.max = 256;
-	cl_visents.alpha = 0;
-
-	cl_visbents.max = 256;
-	cl_visbents.alpha = 0;
-
-	cl_visents.list = malloc(cl_visents.max * sizeof(entity_t));
-	cl_visbents.list = malloc(cl_visbents.max * sizeof(entity_t));
-
-	if (cl_visents.list == 0 || cl_visbents.list == 0)
-	{
-		free(cl_visents.list);
-		free(cl_visbents.list);
-
-		return 0;
-	}
-#endif
 
 	CL_ClearScene();
 
@@ -146,7 +125,6 @@ int CL_InitEnts(void)
 
 void CL_ShutdownEnts()
 {
-#ifdef GLQUAKE
 	free(cl_firstpassents.list);
 	free(cl_visents.list);
 	free(cl_alphaents.list);
@@ -154,29 +132,17 @@ void CL_ShutdownEnts()
 	cl_firstpassents.list = 0;
 	cl_visents.list = 0;
 	cl_alphaents.list = 0;
-#else
-	free(cl_visents.list);
-	free(cl_visbents.list);
-
-	cl_visents.list = 0;
-	cl_visbents.list = 0;
-#endif
 }
 
 void CL_ClearScene (void)
 {
-#ifdef GLQUAKE
 	cl_firstpassents.count = cl_visents.count = cl_alphaents.count = 0;
-#else
-	cl_visents.count = cl_visbents.count = 0;
-#endif
 }
 
 void CL_AddEntity (entity_t *ent)
 {
 	visentlist_t *vislist;
 
-#ifdef GLQUAKE
 	if (ent->model->type == mod_sprite)
 	{
 		vislist = &cl_alphaents;
@@ -190,12 +156,6 @@ void CL_AddEntity (entity_t *ent)
 	{
 		vislist = &cl_visents;
 	}
-#else
-	if (ent->model->type == mod_brush)
-		vislist = &cl_visbents;
-	else
-		vislist = &cl_visents;
-#endif
 
 	if (vislist->count < vislist->max)
 		vislist->list[vislist->count++] = *ent;
@@ -870,7 +830,6 @@ void CL_LinkPacketEntities (void)
 
 
 
-	#ifdef GLQUAKE
 		if (qmb_initialized)
 		{
 			if (state->modelindex == cl_modelindices[mi_explod1] || state->modelindex == cl_modelindices[mi_explod2])
@@ -888,7 +847,6 @@ void CL_LinkPacketEntities (void)
 				continue;
 			}
 		}
-	#endif
 
 		//add trails
 		if (model->flags & ~EF_ROTATE)

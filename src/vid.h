@@ -47,11 +47,6 @@ typedef struct
 	int				recalc_refdef;	// if true, recalc vid-based stuff
 	unsigned		conwidth;
 	unsigned		conheight;
-#ifndef GLQUAKE
-	unsigned		rowbytes;	// may be > width if displayed in a window
-	int				maxwarpwidth;
-	int				maxwarpheight;
-#endif
 } viddef_t;
 
 extern	viddef_t	vid;				// global video state
@@ -93,11 +88,9 @@ const char *VID_GetClipboardText(void);
 void VID_FreeClipboardText(const char *text);
 void VID_SetClipboardText(const char *text);
 
-#ifdef GLQUAKE
 void VID_BeginFrame(void);
 void VID_SetDeviceGammaRamp (unsigned short *ramps);
 qboolean VID_HWGammaSupported(void);
-#endif
 
 unsigned int VID_GetWidth(void);
 unsigned int VID_GetHeight(void);

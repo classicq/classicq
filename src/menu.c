@@ -36,9 +36,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "strl.h"
 
-#ifdef GLQUAKE
 #include "gl_cvars.h"
-#endif
 
 #include "menu.h"
 
@@ -1683,7 +1681,6 @@ void M_Fps_FastMode()
 	Cvar_SetValue(&r_rockettrail, 1);
 	Cvar_SetValue(&v_damagecshift, 0);
 	Cvar_SetValue(&v_bonusflash, 0);
-#ifdef GLQUAKE
 	Cvar_SetValue(&gl_flashblend, 1);
 	Cvar_SetValue(&r_dynamic, 0);
 	Cvar_SetValue(&gl_part_explosions, 0);
@@ -1695,7 +1692,6 @@ void M_Fps_FastMode()
 	Cvar_SetValue(&gl_part_blobs, 0);
 	Cvar_SetValue(&gl_part_lavasplash, 0);
 	Cvar_SetValue(&gl_part_inferno, 0);
-#endif
 }
 
 void M_Fps_HighQuality()
@@ -1712,7 +1708,6 @@ void M_Fps_HighQuality()
 	Cvar_SetValue(&r_rockettrail, 1);
 	Cvar_SetValue(&v_damagecshift, 1);
 	Cvar_SetValue(&v_bonusflash, 1);
-#ifdef GLQUAKE
 	Cvar_SetValue(&gl_flashblend, 0);
 	Cvar_SetValue(&r_dynamic, 1);
 	Cvar_SetValue(&gl_part_explosions, 1);
@@ -1724,7 +1719,6 @@ void M_Fps_HighQuality()
 	Cvar_SetValue(&gl_part_blobs, 1);
 	Cvar_SetValue(&gl_part_lavasplash, 1);
 	Cvar_SetValue(&gl_part_inferno, 1);
-#endif
 }
 
 static void M_Fps_Draw()
@@ -3958,13 +3952,7 @@ void M_Draw()
 		if (SCR_NEED_CONSOLE_BACKGROUND)
 		{
 			Draw_ConsoleBackground (scr_con_current);
-#ifndef GLQUAKE
-			VID_UnlockBuffer ();
-#endif
 			S_ExtraUpdate ();
-#ifndef GLQUAKE
-			VID_LockBuffer ();
-#endif
 		}
 		else
 		{
@@ -4098,13 +4086,7 @@ void M_Draw()
 		m_entersound = false;
 	}
 
-#ifndef GLQUAKE
-	VID_UnlockBuffer ();
-#endif
 	S_ExtraUpdate ();
-#ifndef GLQUAKE
-	VID_LockBuffer ();
-#endif
 }
 
 void M_Keydown(int key)
@@ -4245,9 +4227,7 @@ void M_Init()
 		Menu_AddItem(fpsmenu, MenuItemCvarMultiSelect_Create("Powerup glow", &r_powerupglow, powerupglowvalues));
 		Menu_AddItem(fpsmenu, MenuItemCvarBoolean_Create("Draw torches", &r_drawflame, 0));
 		Menu_AddItem(fpsmenu, MenuItemCvarBoolean_Create("Fast sky", &r_fastsky, 0));
-#ifdef GLQUAKE
 		Menu_AddItem(fpsmenu, MenuItemCvarPosNegBoolean_Create("Fast lights", &gl_flashblend));
-#endif
 
 		Menu_AddItem(fpsmenu, MenuItemSpacer_Create());
 

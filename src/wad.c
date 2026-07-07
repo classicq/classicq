@@ -280,7 +280,6 @@ WAD3 Texture Loading for BSP 3.0 Support
 =============================================================================
 */
 
-#ifdef GLQUAKE
 
 #define TEXWAD_MAXIMAGES 16384
 
@@ -477,4 +476,3 @@ byte *WAD3_LoadTexture(miptex_t *mt)
 	return NULL;
 }
 
-#endif

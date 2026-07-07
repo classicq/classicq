@@ -1912,7 +1912,6 @@ void Sbar_Draw(void)
 		Sbar_DeathmatchOverlay();
 	}
 
-#ifdef GLQUAKE
 	if (sb_showscores || sb_showteamscores || cl.stats[STAT_HEALTH] <= 0)
 		sb_updates = 0;
 
@@ -1926,7 +1925,6 @@ void Sbar_Draw(void)
 	}
 	if (!headsup && cl.spectator && autocam != CAM_TRACK && sb_lines > SBAR_HEIGHT)
 		Draw_TileClear (sbar_xofs, vid.conheight - sb_lines, 320, sb_lines - SBAR_HEIGHT);
-#endif
 
 	if (vid.conwidth >= 512 && sb_lines > 0 && cl.gametype == GAME_DEATHMATCH && !scr_centerSbar.value)
 		Sbar_MiniDeathmatchOverlay ();
