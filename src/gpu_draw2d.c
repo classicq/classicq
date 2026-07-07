@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <ctype.h>
 
 #include "quakedef.h"
-#include "gl_local.h"
+#include "r_local.h"
 #include "sbar.h"
 #include "wad.h"
 #include "image.h"

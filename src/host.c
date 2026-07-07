@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "version.h"
 #include "modules.h"
 #include "sound.h"
-#include "gl_local.h"
+#include "r_local.h"
 #include "fchecks.h"
 #include "filesystem.h"
 #include "fmod.h"

@@ -23,9 +23,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <math.h>
 
 #include "quakedef.h"
-#include "gl_local.h"
-#include "gl_framebuffer.h"
-#include "gl_post_process.h"
+#include "r_local.h"
+#include "r_framebuffer.h"
+#include "r_post_process.h"
 #include "gpu_local.h"
 
 // some cvars are registered only so old configs load without warnings

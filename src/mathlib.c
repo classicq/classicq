@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <math.h>
 
 #include "common.h"
-#include "gl_model.h"	//for struct mplane_s
+#include "r_model.h"	//for struct mplane_s
 
 const vec3_t vec3_origin = {0, 0, 0};
 

@@ -19,8 +19,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // gl_local.h -- private refresh defs
 
-#include "gl_texture.h"
-#include "gl_model.h"
+#include "r_texture.h"
+#include "r_model.h"
 
 #include "render.h"
 #include "protocol.h"
@@ -101,7 +101,7 @@ extern	int	netgraphtexture;
 extern	int	skyboxtextures;
 extern	int underwatertexture, detailtexture;
 
-#include "gl_cvars.h"
+#include "r_cvars.h"
 
 extern	int		lightmode;		// set to gl_lightmode on mapchange
 
