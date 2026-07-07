@@ -1505,9 +1505,9 @@ void SCR_RSShot_f (void) {
 	if (!GPU_ReadPixels(base, glwidth, glheight))
 		memset(base, 0, glwidth * glheight * 3);
 	Image_Resample (base, glwidth, glheight, pixels, width, height, 3, 0);
-#if USE_JPEG
-	if (QLib_isModuleLoaded(qlib_libjpeg)) {
-		success = Image_WriteJPEG (filename, 70, pixels + 3 * width * (height - 1), -width, height)
+#if USE_PNG
+	if (QLib_isModuleLoaded(qlib_libpng)) {
+		success = Image_WritePNG (filename, image_png_compression_level.value, pixels + 3 * width * (height - 1), -width, height)
 			? SSHOT_SUCCESS : SSHOT_FAILED;
 		goto sshot_taken;
 	}
