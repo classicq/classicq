@@ -34,10 +34,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 extern cvar_t vid_fullscreen;
 extern cvar_t vid_width;
 extern cvar_t vid_height;
-#ifdef GLQUAKE
 extern cvar_t vid_conwidth;
 extern cvar_t vid_conheight;
-#endif
 extern cvar_t s_nosound;
 
 #ifndef SERVERONLY
@@ -87,6 +85,9 @@ void Cbuf_InsertText (char *text)
 
 void Cbuf_Execute (void)
 {
+	// drain startup commands stranded by a wait during the one-shot replay
+	if (can_execute_functions)
+		Cbuf_ExecuteEx (cbuf_cmdsave);
 	Cbuf_ExecuteEx (cbuf_main);
 #ifndef SERVERONLY
 	Cbuf_ExecuteEx (cbuf_safe);
@@ -344,12 +345,10 @@ void Cmd_ParseLegacyCmdLineCmds()
 			Cvar_Set(&vid_width, com_argv[i+1]);
 		else if (strcmp(com_argv[i], "-height") == 0 && i+1 < com_argc)
 			Cvar_Set(&vid_height, com_argv[i+1]);
-#ifdef GLQUAKE
 		else if (strcmp(com_argv[i], "-conwidth") == 0 && i+1 < com_argc)
 			Cvar_Set(&vid_conwidth, com_argv[i+1]);
 		else if (strcmp(com_argv[i], "-conheight") == 0 && i+1 < com_argc)
 			Cvar_Set(&vid_conheight, com_argv[i+1]);
-#endif
 		else if (strcmp(com_argv[i], "-fullscreen") == 0)
 			Cvar_Set(&vid_fullscreen, "1");
 		else if (strcmp(com_argv[i], "-window") == 0)

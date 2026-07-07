@@ -37,16 +37,9 @@ qboolean Sys_Video_GetFullscreen(void *display);
 const char *Sys_Video_GetMode(void *display);
 int Sys_Video_FocusChanged(void *display);
 
-#ifdef GLQUAKE
 void Sys_Video_BeginFrame(void *display);
 void Sys_Video_SetGamma(void *display, unsigned short *ramps);
 qboolean Sys_Video_HWGammaSupported(void *display);
-void *Sys_Video_GetProcAddress(void *display, const char *name);
-#else
-void Sys_Video_SetPalette(void *display, unsigned char *palette);
-unsigned int Sys_Video_GetBytesPerRow(void *display);
-void *Sys_Video_GetBuffer(void *display);
-#endif
 
 /* Video mode functions */
 

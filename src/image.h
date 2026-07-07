@@ -38,20 +38,11 @@ byte *Image_LoadTGA(FILE *, char *, int, int, unsigned int *imagewidth, unsigned
 byte *Image_LoadPCX(FILE *, char *, int, int, unsigned int *imagewidth, unsigned int *imageheight);
 
 int Image_WritePNG(char *filename, int compression, byte *pixels, int width, int height);
-#ifdef GLQUAKE
 int Image_WritePNGPLTE (char *filename, int compression, byte *pixels,
 						int width, int height, byte *palette);
-#else
-int Image_WritePNGPLTE (char *filename, int compression, byte *pixels,
-						int width, int height, int rowbytes, byte *palette);
-#endif
 int Image_WriteTGA(char *filename, byte *pixels, int width, int height);
 int Image_WriteJPEG(char *filename, int quality, byte *pixels, int width, int height);
-#ifdef GLQUAKE
 int Image_WritePCX (char *filename, byte *data, int width, int height, byte *palette);
-#else
-int Image_WritePCX (char *filename, byte *data, int width, int height, int rowbytes, byte *palette);
-#endif
 
 extern cvar_t image_jpeg_quality_level, image_png_compression_level;
 

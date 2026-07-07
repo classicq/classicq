@@ -75,3 +75,7 @@ assets/qw/classicq[0-9][0-9][0-9].png
 core
 core.*
 *.dmp
+
+assets/classicq.pdb
+
+assets/qw/progs/*.mdl

@@ -61,7 +61,6 @@ char *SecondsToHourString(int print_time)
 	return time;
 }
 
-#ifdef GLQUAKE
 byte *StringToRGB(char *s)
 {
 	byte *col;
@@ -84,7 +83,6 @@ byte *StringToRGB(char *s)
 	rgb[3] = 255;
 	return rgb;
 }
-#endif
 
 /************************************** File Utils **************************************/
 

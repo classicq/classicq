@@ -24,7 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>
 
 #define SDL_MAIN_HANDLED 1
-#include <SDL.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 
 #include "quakedef.h"
 
@@ -295,13 +296,112 @@ void Sys_FreePathString(const char *p)
 	free((void *)p);
 }
 
+#if defined(_WIN32)
+#include <tlhelp32.h>
+#include <dbghelp.h>
+
+static void Sys_CrashPrintAddr(FILE *f, HANDLE proc, DWORD64 addr)
+{
+	char symbuf[sizeof(SYMBOL_INFO) + 256];
+	SYMBOL_INFO *sym = (SYMBOL_INFO *)symbuf;
+	IMAGEHLP_LINE64 line;
+	DWORD64 disp64 = 0;
+	DWORD disp32 = 0;
+	char *base = (char *)GetModuleHandleA(NULL);
+
+	fprintf(f, "%p (exe offset 0x%llx)", (void *)addr,
+		(unsigned long long)((char *)addr - base));
+
+	memset(symbuf, 0, sizeof(symbuf));
+	sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+	sym->MaxNameLen = 255;
+	if (SymFromAddr(proc, addr, &disp64, sym))
+		fprintf(f, " %s+0x%llx", sym->Name, (unsigned long long)disp64);
+
+	memset(&line, 0, sizeof(line));
+	line.SizeOfStruct = sizeof(line);
+	if (SymGetLineFromAddr64(proc, addr, &disp32, &line))
+		fprintf(f, " [%s:%lu]", line.FileName, line.LineNumber);
+
+	fprintf(f, "\n");
+}
+
+// writes crash.txt next to the executable: symbolized stack and module map
+static LONG WINAPI Sys_CrashHandler(EXCEPTION_POINTERS *info)
+{
+	FILE *f;
+	HANDLE snap;
+	HANDLE proc = GetCurrentProcess();
+	MODULEENTRY32 me;
+	CONTEXT ctx;
+	STACKFRAME64 frame;
+	int i;
+	void *addr = info->ExceptionRecord->ExceptionAddress;
+	char *base = (char *)GetModuleHandleA(NULL);
+
+	f = fopen("crash.txt", "w");
+	if (!f)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+	SymInitialize(proc, NULL, TRUE);
+
+	fprintf(f, "exception 0x%08lx at ", info->ExceptionRecord->ExceptionCode);
+	Sys_CrashPrintAddr(f, proc, (DWORD64)addr);
+	fprintf(f, "exe base %p\n\nstack:\n", base);
+
+	ctx = *info->ContextRecord;
+	memset(&frame, 0, sizeof(frame));
+	frame.AddrPC.Offset = ctx.Rip;
+	frame.AddrPC.Mode = AddrModeFlat;
+	frame.AddrFrame.Offset = ctx.Rbp;
+	frame.AddrFrame.Mode = AddrModeFlat;
+	frame.AddrStack.Offset = ctx.Rsp;
+	frame.AddrStack.Mode = AddrModeFlat;
+
+	for (i = 0; i < 32; i++)
+	{
+		if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, proc, GetCurrentThread(),
+			&frame, &ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+			break;
+		if (!frame.AddrPC.Offset)
+			break;
+		fprintf(f, "%2d: ", i);
+		Sys_CrashPrintAddr(f, proc, frame.AddrPC.Offset);
+	}
+
+	snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
+	if (snap != INVALID_HANDLE_VALUE)
+	{
+		fprintf(f, "\nmodules:\n");
+		me.dwSize = sizeof(me);
+		if (Module32First(snap, &me))
+		{
+			do
+			{
+				fprintf(f, "%p - %p %s\n", (void *)me.modBaseAddr,
+					(void *)(me.modBaseAddr + me.modBaseSize), me.szModule);
+			} while (Module32Next(snap, &me));
+		}
+		CloseHandle(snap);
+	}
+
+	fclose(f);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	double newtime, oldtime;
 
+#if defined(_WIN32)
+	SetUnhandledExceptionFilter(Sys_CrashHandler);
+#endif
+
 	SDL_SetMainReady();
 
-	if (SDL_Init(0) != 0)
+	if (!SDL_Init(0))
 	{
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
 		return 1;

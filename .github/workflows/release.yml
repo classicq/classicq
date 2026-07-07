@@ -59,12 +59,7 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
-
-      - name: Install Linux system dependencies
-        if: matrix.target == 'x86_64-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
+          cache-key: ${{ matrix.target }}
 
       - name: Build release binary
         shell: bash
@@ -75,7 +70,8 @@ jobs:
           fi
           for i in 1 2 3; do
             zig build $BUILD_ARGS && break || {
-              echo "::warning::Build attempt $i failed, retrying"
+              echo "::warning::Build attempt $i failed"
+              [ $i -eq 3 ] && exit 1
               rm -rf .zig-cache
               sleep 2
             }
@@ -119,21 +115,6 @@ jobs:
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Pick release body
-        id: body
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          case "$TAG" in
-            v3.0.0-rc1|v3.0.0)
-              echo "PATH=.github/release-notes/v3.0.0.md" >> $GITHUB_OUTPUT
-              echo "AUTOGEN=false" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "PATH=" >> $GITHUB_OUTPUT
-              echo "AUTOGEN=true" >> $GITHUB_OUTPUT
-              ;;
-          esac
 
       - name: Assemble per-OS ZIPs
         run: |
@@ -191,8 +172,7 @@ jobs:
           files: |
             classicQ-*.zip
             SHA256SUMS
-          body_path: ${{ steps.body.outputs.PATH }}
-          generate_release_notes: ${{ steps.body.outputs.AUTOGEN }}
+          generate_release_notes: true
           draft: true
           prerelease: ${{ steps.reltype.outputs.prerelease }}
 
@@ -213,7 +193,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VER="${TAG#v}"
-          BASE="https://github.com/classicq/classicq/releases/download/${TAG}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
           jq -n \
             --arg ver "$VER" \
             --arg win "$BASE/classicQ-$VER-windows-amd64.zip" \

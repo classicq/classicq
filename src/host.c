@@ -26,18 +26,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>
 #include <locale.h>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "quakedef.h"
 #include "pmove.h"
 #include "version.h"
 #include "modules.h"
 #include "sound.h"
-#ifdef GLQUAKE
-#include "gl_local.h"
-#else
-#include "d_iface.h"
-#endif
+#include "r_local.h"
 #include "fchecks.h"
 #include "filesystem.h"
 #include "fmod.h"
@@ -203,11 +199,7 @@ void Host_Init(int argc, char **argv)
 
 	VID_CvarInit();
 	S_CvarInit();
-#ifdef GLQUAKE
-	GL_CvarInit();
-#else
-	D_CvarInit();
-#endif
+	R_CommonCvarInit();
 	Image_CvarInit();
 	R_CvarInit();
 	Con_CvarInit();

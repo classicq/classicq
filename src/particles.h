@@ -15,10 +15,8 @@ typedef struct particle_s
 	ptype_t		type;
 } particle_t;
 
-#ifdef GLQUAKE
-void GL_DrawParticleInit(void);
-void GL_DrawParticleBegin(void);
-void GL_DrawParticleEnd(void);
-void GL_DrawParticle(particle_t *p);
-#endif
+void R_DrawParticleInit(void);
+void R_DrawParticleBegin(void);
+void R_DrawParticleEnd(void);
+void R_DrawParticle(particle_t *p);
 

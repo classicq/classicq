@@ -657,11 +657,9 @@ static void DumpConfig(char *name)
 		fprintf(f, newlines);
 
 
-	#ifdef GLQUAKE
 		Config_PrintHeading(f, "M I S C E L L A N E O U S   C O M M A N D S");
 		DumpMisc(f);
 		fprintf(f, newlines);
-	#endif
 
 		Config_PrintHeading(f, "P L U S   C O M M A N D S");
 		DumpPlusCommands(f);

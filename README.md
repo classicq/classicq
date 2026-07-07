@@ -1,4 +1,4 @@
-![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
+![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black) ![SDL3](https://img.shields.io/badge/SDL-3-1E4E79) ![Vulkan](https://img.shields.io/badge/Vulkan-A41E22?logo=vulkan&logoColor=white) ![Direct3D 12](https://img.shields.io/badge/Direct3D_12-107C10) ![Metal](https://img.shields.io/badge/Metal-8A8A8E?logo=apple&logoColor=white)
 
 # classicQ
 
@@ -20,12 +20,9 @@ With those in hand, grab the classicQ binary from [the releases page](https://gi
 
 Binary lands in `assets/` next to the configs. Run from there.
 
-Oh, and on Linux you also need SDL2's dev package first. Try this:
+SDL3 is built from source as part of the build. No system dev packages needed, on any platform.
 
-- Ubuntu: `sudo apt install libsdl2-dev`
-- Fedora: `sudo dnf install SDL2-devel`
-- Arch: `sudo pacman -S sdl2`
-- openSUSE: `sudo zypper install libSDL2-devel`
+Rendering runs on SDL_GPU: Vulkan or Direct3D 12 on Windows, Vulkan on Linux, Metal on macOS.
 
 ## Credits
 

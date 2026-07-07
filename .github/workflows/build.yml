@@ -7,7 +7,8 @@ on:
       - 'src/**'
       - 'build.zig'
       - 'build.zig.zon'
-      - 'third_party/**'
+      - 'assets/icons/**'
+      - 'assets/macos/**'
       - '.github/workflows/build.yml'
   pull_request:
     branches: [master]
@@ -15,11 +16,12 @@ on:
       - 'src/**'
       - 'build.zig'
       - 'build.zig.zon'
-      - 'third_party/**'
+      - 'assets/icons/**'
+      - 'assets/macos/**'
       - '.github/workflows/build.yml'
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -59,20 +61,7 @@ jobs:
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
-
-      - name: Install Linux system dependencies
-        if: matrix.target == 'x86_64-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
-
-      - name: Cache Zig packages
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.cache/zig
-          key: zig-pkg-${{ matrix.target }}-${{ hashFiles('build.zig.zon') }}
-          restore-keys: |
-            zig-pkg-${{ matrix.target }}-
+          cache-key: ${{ matrix.target }}
 
       - name: Build
         shell: bash
@@ -83,7 +72,8 @@ jobs:
           fi
           for i in 1 2 3; do
             zig build $BUILD_ARGS && break || {
-              echo "::warning::Build attempt $i failed, retrying"
+              echo "::warning::Build attempt $i failed"
+              [ $i -eq 3 ] && exit 1
               rm -rf .zig-cache
               sleep 2
             }

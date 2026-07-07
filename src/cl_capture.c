@@ -32,9 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 static qboolean OnChange_movie_dir(cvar_t *var, char *string);
 int SCR_Screenshot(char *);
 
-#ifdef GLQUAKE
 	extern cvar_t scr_sshot_type;
-#endif
 
 cvar_t   movie_fps			=  {"demo_capture_fps", "30.0"};
 cvar_t   movie_dir			=  {"demo_capture_dir",  "capture", 0, OnChange_movie_dir};
@@ -69,11 +67,7 @@ static void Movie_Start(double _time) {
 	movie_start_time = cls.realtime;
 
 	movie_frame_count = 0;
-#ifdef GLQUAKE
 	strcpy(image_ext, "tga");
-#else
-	strcpy(image_ext, "pcx");
-#endif
 }
 
 void Movie_Stop (void) {
@@ -132,10 +126,6 @@ void Movie_CvarInit(void) {
 double Movie_StartFrame(void) {
 	double time;
 
-	if (movie_first_frame)
-		movie_start_time = cls.realtime;
-	movie_first_frame = false;
-
 	time = movie_fps.value > 0 ? 1.0 / movie_fps.value : 1 / 30.0;
 	return bound(1.0 / 1000, time, 1.0);
 }
@@ -145,6 +135,12 @@ void Movie_FinishFrame(void) {
 
 	if (!Movie_IsCapturing())
 		return;
+
+	// latch here, cls.realtime is not valid yet when capture starts from the command line
+	if (movie_first_frame) {
+		movie_start_time = cls.realtime;
+		movie_first_frame = false;
+	}
 
 #ifdef _WIN32
 	snprintf(fname, sizeof(fname), "%s/capture_%02d-%02d-%04d_%02d-%02d-%02d/shot-%06d.%s",
@@ -157,7 +153,8 @@ void Movie_FinishFrame(void) {
 #endif
 	SCR_Screenshot(fname);
 	movie_frame_count++;
-	if (cls.realtime >= movie_start_time + movie_len)
+	// movie_len is demo time; the wall clock runs slower than the demo while writing frames
+	if (movie_frame_count * Movie_StartFrame() >= movie_len)
 		Movie_Stop();
 }
 

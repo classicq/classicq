@@ -21,24 +21,29 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <string.h>
 #include <stdio.h>
 
-#define SDL_MAIN_HANDLED 1
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "quakedef.h"
 #include "render.h"
 #include "keys.h"
 #include "sys_video.h"
 #include "image.h"
-#include "gl_local.h"
+#include "gpu_local.h"
 
 #define KEYQ_SIZE 256
 
-static cvar_t vid_vsync = { "vid_vsync", "0", CVAR_ARCHIVE };
+static qboolean OnChange_vid_vsync(cvar_t *var, char *string)
+{
+	var->value = Q_atof(string);
+	GPU_SetVsync((int)var->value);
+	return false;
+}
+
+static cvar_t vid_vsync = { "vid_vsync", "0", CVAR_ARCHIVE, OnChange_vid_vsync };
 
 struct sdldisplay
 {
 	SDL_Window *window;
-	SDL_GLContext gl_context;
 
 	unsigned int width;
 	unsigned int height;
@@ -46,8 +51,8 @@ struct sdldisplay
 	int fullscreen;
 	char mode[64];
 
-	int mouse_dx;
-	int mouse_dy;
+	float mouse_dx;
+	float mouse_dy;
 
 	struct keyqent
 	{
@@ -58,64 +63,7 @@ struct sdldisplay
 	unsigned int keyq_tail;
 
 	int focus_changed;
-
-	unsigned short orig_gamma[3 * 256];
-	int has_orig_gamma;
 };
-
-#ifdef _WIN32
-
-typedef void (APIENTRY *PFN_GLMULTITEXCOORD2F)(GLenum, GLfloat, GLfloat);
-typedef void (APIENTRY *PFN_GLDRAWRANGEELEMENTS)(GLenum, GLuint, GLuint, GLsizei, GLenum, const GLvoid *);
-typedef void (APIENTRY *PFN_GLCLIENTACTIVETEXTURE)(GLenum);
-typedef void (APIENTRY *PFN_GLACTIVETEXTURE)(GLenum);
-
-static PFN_GLMULTITEXCOORD2F     p_glMultiTexCoord2f;
-static PFN_GLDRAWRANGEELEMENTS   p_glDrawRangeElements;
-static PFN_GLCLIENTACTIVETEXTURE p_glClientActiveTexture;
-static PFN_GLACTIVETEXTURE       p_glActiveTexture;
-
-static void *resolve_gl(const char *primary, const char *fallback)
-{
-	void *p = SDL_GL_GetProcAddress(primary);
-	if (!p && fallback)
-		p = SDL_GL_GetProcAddress(fallback);
-	return p;
-}
-
-static void resolve_gl_thunks(void)
-{
-	p_glMultiTexCoord2f     = (PFN_GLMULTITEXCOORD2F)     resolve_gl("glMultiTexCoord2f",     "glMultiTexCoord2fARB");
-	p_glDrawRangeElements   = (PFN_GLDRAWRANGEELEMENTS)   resolve_gl("glDrawRangeElements",   "glDrawRangeElementsEXT");
-	p_glClientActiveTexture = (PFN_GLCLIENTACTIVETEXTURE) resolve_gl("glClientActiveTexture", "glClientActiveTextureARB");
-	p_glActiveTexture       = (PFN_GLACTIVETEXTURE)       resolve_gl("glActiveTexture",       "glActiveTextureARB");
-}
-
-void glMultiTexCoord2f(GLenum target, GLfloat s, GLfloat t)
-{
-	if (p_glMultiTexCoord2f)
-		p_glMultiTexCoord2f(target, s, t);
-}
-
-void glDrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices)
-{
-	if (p_glDrawRangeElements)
-		p_glDrawRangeElements(mode, start, end, count, type, indices);
-}
-
-void glClientActiveTexture(GLenum texture)
-{
-	if (p_glClientActiveTexture)
-		p_glClientActiveTexture(texture);
-}
-
-void glActiveTexture(GLenum texture)
-{
-	if (p_glActiveTexture)
-		p_glActiveTexture(texture);
-}
-
-#endif
 
 static keynum_t sdl_keycode_to_quake(SDL_Keycode sym)
 {
@@ -211,25 +159,25 @@ static void pump_events(struct sdldisplay *d)
 	{
 		switch (ev.type)
 		{
-			case SDL_QUIT:
+			case SDL_EVENT_QUIT:
 				Sys_Quit();
 				break;
 
-			case SDL_KEYDOWN:
-			case SDL_KEYUP:
+			case SDL_EVENT_KEY_DOWN:
+			case SDL_EVENT_KEY_UP:
 			{
 				keynum_t k;
-				if (ev.key.keysym.scancode == SDL_SCANCODE_GRAVE)
+				if (ev.key.scancode == SDL_SCANCODE_GRAVE)
 					k = '`';
 				else
-					k = sdl_keycode_to_quake(ev.key.keysym.sym);
+					k = sdl_keycode_to_quake(ev.key.key);
 				if (k)
-					push_key(d, k, ev.type == SDL_KEYDOWN);
+					push_key(d, k, ev.type == SDL_EVENT_KEY_DOWN);
 				break;
 			}
 
-			case SDL_MOUSEBUTTONDOWN:
-			case SDL_MOUSEBUTTONUP:
+			case SDL_EVENT_MOUSE_BUTTON_DOWN:
+			case SDL_EVENT_MOUSE_BUTTON_UP:
 			{
 				keynum_t k = 0;
 				switch (ev.button.button)
@@ -241,46 +189,44 @@ static void pump_events(struct sdldisplay *d)
 				case SDL_BUTTON_X2:     k = K_MOUSE5; break;
 				}
 				if (k)
-					push_key(d, k, ev.type == SDL_MOUSEBUTTONDOWN);
+					push_key(d, k, ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
 				break;
 			}
 
-			case SDL_MOUSEWHEEL:
-				if (ev.wheel.y > 0)
+			case SDL_EVENT_MOUSE_WHEEL:
+			{
+				// integer_y folds fractional touchpad deltas into whole ticks
+				int ticks = ev.wheel.integer_y;
+				keynum_t k = (ticks > 0) ? K_MWHEELUP : K_MWHEELDOWN;
+				if (ticks < 0)
+					ticks = -ticks;
+				while (ticks-- > 0)
 				{
-					push_key(d, K_MWHEELUP, true);
-					push_key(d, K_MWHEELUP, false);
-				}
-				else if (ev.wheel.y < 0)
-				{
-					push_key(d, K_MWHEELDOWN, true);
-					push_key(d, K_MWHEELDOWN, false);
+					push_key(d, k, true);
+					push_key(d, k, false);
 				}
 				break;
+			}
 
-			case SDL_MOUSEMOTION:
+			case SDL_EVENT_MOUSE_MOTION:
 				d->mouse_dx += ev.motion.xrel;
 				d->mouse_dy += ev.motion.yrel;
 				break;
 
-			case SDL_WINDOWEVENT:
-				switch (ev.window.event)
-				{
-					case SDL_WINDOWEVENT_FOCUS_GAINED:
-					case SDL_WINDOWEVENT_FOCUS_LOST:
-						d->focus_changed = 1;
-						break;
-					case SDL_WINDOWEVENT_RESIZED:
-					case SDL_WINDOWEVENT_SIZE_CHANGED:
-					{
-						int dw = 0, dh = 0;
-						SDL_GL_GetDrawableSize(d->window, &dw, &dh);
-						d->width  = (unsigned int)dw;
-						d->height = (unsigned int)dh;
-						break;
-					}
-				}
+			case SDL_EVENT_WINDOW_FOCUS_GAINED:
+			case SDL_EVENT_WINDOW_FOCUS_LOST:
+				d->focus_changed = 1;
 				break;
+
+			case SDL_EVENT_WINDOW_RESIZED:
+			case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+			{
+				int dw = 0, dh = 0;
+				SDL_GetWindowSizeInPixels(d->window, &dw, &dh);
+				d->width  = (unsigned int)dw;
+				d->height = (unsigned int)dh;
+				break;
+			}
 		}
 	}
 }
@@ -294,9 +240,7 @@ int Sys_Video_Init(void)
 {
 	if (SDL_WasInit(SDL_INIT_VIDEO) == 0)
 	{
-		SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
-
-		if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+		if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
 		{
 			Com_Printf("SDL_InitSubSystem(VIDEO) failed: %s\n", SDL_GetError());
 			return 0;
@@ -307,6 +251,8 @@ int Sys_Video_Init(void)
 
 void Sys_Video_Shutdown(void)
 {
+	GPU_ShutdownAll();
+
 	if (SDL_WasInit(SDL_INIT_VIDEO))
 		SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
@@ -321,13 +267,13 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 
 	if (width == 0 || height == 0)
 	{
-		SDL_DisplayMode dm;
-		if (SDL_GetCurrentDisplayMode(0, &dm) == 0)
+		const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+		if (dm)
 		{
 			if (width == 0)
-				width = (unsigned int)dm.w;
+				width = (unsigned int)dm->w;
 			if (height == 0)
-				height = (unsigned int)dm.h;
+				height = (unsigned int)dm->h;
 		}
 		else
 		{
@@ -336,29 +282,21 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 		}
 	}
 
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-	Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+	SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
 	if (fullscreen)
-		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+		flags |= SDL_WINDOW_FULLSCREEN;
 	else
 		flags |= SDL_WINDOW_RESIZABLE;
 
-	d->window = SDL_CreateWindow("classicQ",
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-		(int)width, (int)height,
-		flags);
+	d->window = SDL_CreateWindow("classicQ", (int)width, (int)height, flags);
 	if (!d->window)
 	{
 		Com_Printf("SDL_CreateWindow failed: %s\n", SDL_GetError());
 		free(d);
 		return NULL;
 	}
+	SDL_SetWindowPosition(d->window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	SDL_ShowWindow(d->window);
 
 #ifndef _WIN32
 	// Windows .ico embedded via RC; other platforms get PNG fallback
@@ -368,60 +306,42 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 		icon_pixels = Image_LoadPNG(NULL, "icons/256.png", 0, 0, &icon_w, &icon_h);
 		if (icon_pixels)
 		{
-			SDL_Surface *icon = SDL_CreateRGBSurfaceWithFormatFrom(
-				icon_pixels, (int)icon_w, (int)icon_h,
-				32, (int)icon_w * 4, SDL_PIXELFORMAT_RGBA32);
+			SDL_Surface *icon = SDL_CreateSurfaceFrom(
+				(int)icon_w, (int)icon_h, SDL_PIXELFORMAT_RGBA32,
+				icon_pixels, (int)icon_w * 4);
 			if (icon)
 			{
 				SDL_SetWindowIcon(d->window, icon);
-				SDL_FreeSurface(icon);
+				SDL_DestroySurface(icon);
 			}
 			free(icon_pixels);
 		}
 	}
 #endif
 
-	d->gl_context = SDL_GL_CreateContext(d->window);
-	if (!d->gl_context)
+	if (!GPU_Init(d->window, (int)vid_vsync.value))
 	{
-		Com_Printf("SDL_GL_CreateContext failed: %s\n", SDL_GetError());
 		SDL_DestroyWindow(d->window);
 		free(d);
 		return NULL;
 	}
 
-	{
-		int interval = (int)vid_vsync.value;
-		if (SDL_GL_SetSwapInterval(interval) != 0 && interval == -1)
-			SDL_GL_SetSwapInterval(1);
-	}
-
-#ifdef _WIN32
-	resolve_gl_thunks();
-#endif
-
 	int w = (int)width, h = (int)height;
-	SDL_GL_GetDrawableSize(d->window, &w, &h);
+	SDL_GetWindowSizeInPixels(d->window, &w, &h);
 	d->width  = (unsigned int)w;
 	d->height = (unsigned int)h;
 	d->fullscreen = fullscreen ? 1 : 0;
 
 	{
-		int idx = SDL_GetWindowDisplayIndex(d->window);
-		int win_w = 0, win_h = 0;
-		float ddpi = 96.0f;
-		float dpi_ratio, win_ratio;
+		float scale = SDL_GetWindowDisplayScale(d->window);
+		float density = SDL_GetWindowPixelDensity(d->window);
 
-		if (idx < 0)
-			idx = 0;
-		if (SDL_GetDisplayDPI(idx, &ddpi, NULL, NULL) != 0 || ddpi <= 0.0f)
-			ddpi = 96.0f;
-		dpi_ratio = ddpi / 96.0f;
+		if (scale <= 0.0f)
+			scale = 1.0f;
+		if (density <= 0.0f)
+			density = 1.0f;
 
-		SDL_GetWindowSize(d->window, &win_w, &win_h);
-		win_ratio = (win_w > 0) ? (float)w / (float)win_w : 1.0f;
-
-		d->dpi_scale = (dpi_ratio > win_ratio) ? dpi_ratio : win_ratio;
+		d->dpi_scale = (scale > density) ? scale : density;
 		if (d->dpi_scale < 1.0f)
 			d->dpi_scale = 1.0f;
 	}
@@ -436,9 +356,6 @@ void *Sys_Video_Open(const char *mode, unsigned int width, unsigned int height, 
 		snprintf(d->mode, sizeof(d->mode), "%ux%u", d->width, d->height);
 	}
 
-	if (SDL_GetWindowGammaRamp(d->window, d->orig_gamma + 0, d->orig_gamma + 256, d->orig_gamma + 512) == 0)
-		d->has_orig_gamma = 1;
-
 	return d;
 }
 
@@ -448,11 +365,7 @@ void Sys_Video_Close(void *display)
 	if (!d)
 		return;
 
-	if (d->has_orig_gamma && d->window)
-		SDL_SetWindowGammaRamp(d->window, d->orig_gamma + 0, d->orig_gamma + 256, d->orig_gamma + 512);
-
-	if (d->gl_context)
-		SDL_GL_DeleteContext(d->gl_context);
+	GPU_Shutdown();
 	if (d->window)
 		SDL_DestroyWindow(d->window);
 
@@ -467,10 +380,9 @@ unsigned int Sys_Video_GetNumBuffers(void *display)
 
 void Sys_Video_Update(void *display, vrect_t *rects)
 {
-	struct sdldisplay *d = display;
+	(void)display;
 	(void)rects;
-	if (d && d->window)
-		SDL_GL_SwapWindow(d->window);
+	GPU_EndFrame();
 }
 
 int Sys_Video_GetKeyEvent(void *display, keynum_t *keynum, qboolean *down)
@@ -494,22 +406,27 @@ int Sys_Video_GetKeyEvent(void *display, keynum_t *keynum, qboolean *down)
 void Sys_Video_GetMouseMovement(void *display, int *mousex, int *mousey)
 {
 	struct sdldisplay *d = display;
+	int dx, dy;
 	if (!d)
 	{
 		if (mousex) *mousex = 0;
 		if (mousey) *mousey = 0;
 		return;
 	}
-	if (mousex) *mousex = d->mouse_dx;
-	if (mousey) *mousey = d->mouse_dy;
-	d->mouse_dx = 0;
-	d->mouse_dy = 0;
+	// report whole pixels, keep fractional remainder
+	dx = (int)d->mouse_dx;
+	dy = (int)d->mouse_dy;
+	if (mousex) *mousex = dx;
+	if (mousey) *mousey = dy;
+	d->mouse_dx -= (float)dx;
+	d->mouse_dy -= (float)dy;
 }
 
 void Sys_Video_GrabMouse(void *display, int dograb)
 {
-	(void)display;
-	SDL_SetRelativeMouseMode(dograb ? SDL_TRUE : SDL_FALSE);
+	struct sdldisplay *d = display;
+	if (d && d->window)
+		SDL_SetWindowRelativeMouseMode(d->window, dograb ? true : false);
 }
 
 void Sys_Video_SetWindowTitle(void *display, const char *text)
@@ -563,28 +480,21 @@ int Sys_Video_FocusChanged(void *display)
 void Sys_Video_BeginFrame(void *display)
 {
 	struct sdldisplay *d = display;
-	if (d && d->window && d->gl_context)
-		SDL_GL_MakeCurrent(d->window, d->gl_context);
+	if (d && d->window)
+		GPU_BeginFrame(d->width, d->height);
 }
 
 void Sys_Video_SetGamma(void *display, unsigned short *ramps)
 {
-	struct sdldisplay *d = display;
-	if (!d || !d->window || !ramps)
-		return;
-	SDL_SetWindowGammaRamp(d->window, ramps + 0, ramps + 256, ramps + 512);
+	// SDL3 dropped gamma ramps; shader gamma path covers it
+	(void)display;
+	(void)ramps;
 }
 
 qboolean Sys_Video_HWGammaSupported(void *display)
 {
-	struct sdldisplay *d = display;
-	return d ? (qboolean)d->has_orig_gamma : 0;
-}
-
-void *Sys_Video_GetProcAddress(void *display, const char *name)
-{
 	(void)display;
-	return SDL_GL_GetProcAddress(name);
+	return 0;
 }
 
 const char *Sys_Video_GetClipboardText(void *display)

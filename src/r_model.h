@@ -24,12 +24,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "modelgen.h"
 #include "spritegn.h"
 #include "bspfile.h"
+#include "common.h"
 
 /*
-
 d*_t structures are on-disk representations
 m*_t structures are in-memory
-
 */
 
 #define NODENUM_TO_NODE(model, nodenum) \
@@ -48,18 +47,8 @@ m*_t structures are in-memory
 #define EF_BLUE					64
 #define EF_RED					128
 
-/*
-==============================================================================
 
-BRUSH MODELS
-
-==============================================================================
-*/
-
-
-//
 // in memory representation
-//
 // !!! if this is changed, it must be changed in asm_draw.h too !!!
 typedef struct {
 	vec3_t		position;
@@ -81,13 +70,20 @@ typedef struct mplane_s {
 } mplane_t;
 
 typedef struct texture_s {
-	char		name[16];
-	unsigned	width, height;
-	int			anim_total;				// total tenths in sequence ( 0 = no)
-	int			anim_min, anim_max;		// time for this frame min <=time< max
-	struct texture_s *anim_next;		// in the animation sequence
-	struct texture_s *alternate_anims;	// bmodels in frmae 1 use these
-	unsigned	offsets[MIPLEVELS];		// four mip maps stored
+	char				name[16];
+	unsigned			width, height;
+	int					gl_texturenum;
+	int					fb_texturenum;			//index of fullbright mask or 0
+	struct msurface_s	*texturechain[2];		
+	struct msurface_s	**texturechain_tail[2];	
+												//		Points to the node right after the last non-NULL node in the texturechain.
+	int					anim_total;				//total tenths in sequence ( 0 = no)
+	int					anim_min, anim_max;		//time for this frame min <=time< max
+	struct texture_s	*anim_next;				//in the animation sequence
+	struct texture_s	*alternate_anims;		//bmodels in frame 1 use these
+	unsigned			offsets[MIPLEVELS];		//four mip maps stored
+	unsigned			colour;					
+	int					isLumaTexture;
 } texture_t;
 
 
@@ -95,90 +91,121 @@ typedef struct texture_s {
 #define SURF_DRAWSKY            (1<<2)
 #define SURF_DRAWTURB           (1<<3)
 #define SURF_DRAWTILED          (1<<4)
-#define SURF_DRAWBACKGROUND     (1<<5)
+#define SURF_UNDERWATER         (1<<6)
+#define SURF_DRAWALPHA          (1<<7)
 
-// !!! if this is changed, it must be changed in asm_draw.h too !!!
 typedef struct {
-	unsigned short	v[2];
+	unsigned int	v[2];
 	unsigned int	cachededgeoffset;
 } medge_t;
 
 typedef struct {
 	float		vecs[2][4];
-	float		mipadjust;
 	texture_t	*texture;
 	int			flags;
 } mtexinfo_t;
 
-typedef struct msurface_s {
-	int			dlightframe;
-	int			dlightbits;
+#define WARPVERTEXSIZE 5 /* xyz s1t1 */
 
+#define	VERTEXSIZE	9	//xyz s1t1 s2t2 s3t3 where xyz = vert coords; s1t1 = normal tex coords; 
+						//s2t2 = lightmap tex coords; s3t2 = detail tex coords
+
+struct glwarppoly
+{
+	struct glwarppoly *next;
+	int numverts;
+	float verts[4][WARPVERTEXSIZE];
+};
+
+typedef struct glpoly_s
+{
+	struct	glpoly_s	*chain;				//next lightmap poly in chain
+	struct	glpoly_s	*fb_chain;			//next fb poly in chain
+	struct	glpoly_s	*luma_chain;			//next luma poly in chain
+	struct	glpoly_s	*caustics_chain;	//next caustic poly in chain
+	struct	glpoly_s	*detail_chain;		//next detail poly in chain
+	int		numverts;
+	int firstindex;
+	float	verts[4][VERTEXSIZE];	// variable sized (xyz s1t1 s2t2)
+} glpoly_t;
+
+typedef struct msurface_s {
 	mplane_t	*plane;
 
 	int			firstedge;	// look up in model->surfedges[], negative numbers
 	int			numedges;	// are backwards edges
 	
-// surface generation data
-	struct surfcache_s	*cachespots[MIPLEVELS];
-
 	short		texturemins[2];
 	short		extents[2];
 
-
 	int		is_drawflat;
-	float 		color[3];
-	unsigned char	palcolor;
+	float		color[3];
+
+	int			light_s, light_t;	// gl lightmap coordinates
+
+	struct glwarppoly *warppolys;
+	glpoly_t	*polys;				// multiple if warped
+	float *fastpolys;
+	float *shadertexcoords;
+	unsigned int fastpolyfirstindex;
+	struct	msurface_s	*texturechain;
 
 	mtexinfo_t	*texinfo;
 	
 // lighting info
+	int			dlightframe;
+	int			dlightbits;
+
+	int			lightmaptexturenum;
 	byte		styles[MAXLIGHTMAPS];
+	int			cached_light[MAXLIGHTMAPS];	// values currently used in lightmap
+	qboolean	cached_dlight;				// true if dynamic light in cache
 	byte		*samples;		// [numstyles*surfsize]
 } msurface_t;
 
-typedef struct mnode_s
-{
+typedef struct mnode_s {
 // common with leaf
 	int			visframe;		// node needs to be traversed if current
-	
-	short		minmaxs[6];		// for bounding box culling
 
-	unsigned short	parentnum;
+	float		minmaxs[6];		// for bounding box culling
+
+	unsigned int	parentnum;
 
 // node specific
-	unsigned short planenum;
-	unsigned short	childrennum[2];
+	unsigned int	planenum;
+	unsigned int	childrennum[2];
 
-	unsigned short		firstsurface;
-	unsigned short		numsurfaces;
+	unsigned int	firstsurface;
+	unsigned int	numsurfaces;
 } mnode_t;
-
-
 
 typedef struct mleaf_s {
 // common with node
 	int			visframe;		// node needs to be traversed if current
 
-	short		minmaxs[6];		// for bounding box culling
+	float		minmaxs[6];		// for bounding box culling
 
-	unsigned short parentnum;
+	unsigned int	parentnum;
 
 // leaf specific
-	short contents;		// 0, to differentiate from leafs
+	short			contents;		// wil be a negative contents number
 
 	byte		*compressed_vis;
 	struct efrag_s	*efrags;
 
-	unsigned short	firstmarksurfacenum;
+	unsigned int	firstmarksurfacenum;
 	int			nummarksurfaces;
-	int			key;			// BSP sequence number for leaf's contents
 	byte		ambient_sound_level[NUM_AMBIENTS];
 } mleaf_t;
 
-// !!! if this is changed, it must be changed in asm_i386.h too !!!
+// In-memory clipnode; BSP29 short children are sign-extended to int at load.
 typedef struct {
-	dclipnode_t	*clipnodes;
+	int			planenum;
+	int			children[2];
+} mclipnode_t;
+
+typedef struct {
+	mclipnode_t	*clipnodes;
 	mplane_t	*planes;
 	int			firstclipnode;
 	int			lastclipnode;
@@ -186,21 +213,13 @@ typedef struct {
 	vec3_t		clip_maxs;
 } hull_t;
 
-/*
-==============================================================================
-
-SPRITE MODELS
-
-==============================================================================
-*/
-
 
 // FIXME: shorten these?
 typedef struct mspriteframe_s {
 	int		width;
 	int		height;
 	float	up, down, left, right;
-	byte	pixels[4];
+	int		gl_texturenum;
 } mspriteframe_t;
 
 typedef struct {
@@ -224,45 +243,28 @@ typedef struct {
 } msprite_t;
 
 
-/*
-==============================================================================
-
-ALIAS MODELS
-
-Alias models are position independent, so the cache manager can move them.
-==============================================================================
-*/
-
 typedef struct {
-	aliasframetype_t	type;
-	trivertx_t			bboxmin;
-	trivertx_t			bboxmax;
-	trivertx_t			*frame;
+	int					firstpose;
+	int					numposes;
+	float				interval;
+	vec3_t				bboxmin;
+	vec3_t				bboxmax;
+	float				radius;
+	int					frame;
 	char				name[16];
 } maliasframedesc_t;
 
 typedef struct {
-	aliasskintype_t		type;
-	byte					*skin;
-} maliasskindesc_t;
-
-typedef struct {
 	trivertx_t			bboxmin;
 	trivertx_t			bboxmax;
-	trivertx_t			*frame;
+	int					frame;
 } maliasgroupframedesc_t;
 
 typedef struct {
 	int						numframes;
-	float						*intervals;
+	int						intervals;
 	maliasgroupframedesc_t	frames[1];
 } maliasgroup_t;
-
-typedef struct {
-	int					numskins;
-	float					*intervals;
-	maliasskindesc_t	skindescs[1];
-} maliasskingroup_t;
 
 // !!! if this is changed, it must be changed in asm_draw.h too !!!
 typedef struct mtriangle_s {
@@ -270,19 +272,54 @@ typedef struct mtriangle_s {
 	int					vertindex[3];
 } mtriangle_t;
 
+
+#define	MAX_SKINS	32
 typedef struct {
-	int					model;
-	int					stverts;
-	maliasskindesc_t			*skindesc;
-	int					triangles;
-	maliasframedesc_t	frames[1];
+	int			ident;
+	int			version;
+	vec3_t		scale;
+	vec3_t		scale_origin;
+	float		boundingradius;
+	vec3_t		eyeposition;
+	int			numskins;
+	int			skinwidth;
+	int			skinheight;
+	int			numverts;
+	int			numtris;
+	int			numframes;
+	synctype_t	synctype; /* Unused */
+	int			flags;
+	float		size;
+
+	/* Vertex array stuff */
+	unsigned short totalverts;
+	unsigned int collisions;
+	unsigned short *collisionmap;
+
+	unsigned short *indices;
+	unsigned short indexmin;
+	unsigned short indexmax;
+
+	float *texcoords;
+
+	/* For array-based frame lerping */
+	trivertx_t *realposeverts; /* numverts * numposes */
+
+	int					numposes;
+
+	/* Old data... Can hopefully go away when array-based drawing is done */
+	int					gl_texturenum[MAX_SKINS][4];
+	int					fb_texturenum[MAX_SKINS][4];
+	maliasframedesc_t	frames[1];	// variable sized
 } aliashdr_t;
 
-//===================================================================
+#define	MAXALIASVERTS	2048
+#define	MAXALIASFRAMES	256
+#define	MAXALIASTRIS	2048
+extern	stvert_t	stverts[MAXALIASVERTS];
+extern	mtriangle_t	triangles[MAXALIASTRIS];
+extern	trivertx_t	*poseverts[MAXALIASFRAMES];
 
-//
-// Whole model
-//
 
 typedef enum {mod_brush, mod_sprite, mod_alias} modtype_t;
 
@@ -348,10 +385,10 @@ typedef struct model_s
 	int			*surfedges;
 
 	int			numclipnodes;
-	dclipnode_t	*clipnodes;
+	mclipnode_t	*clipnodes;
 
 	int			nummarksurfaces;
-	unsigned short	*marksurfaces;
+	unsigned int	*marksurfaces;
 
 	hull_t		hulls[MAX_MAP_HULLS];
 
@@ -362,8 +399,8 @@ typedef struct model_s
 	byte		*lightdata;
 	char		*entities;
 
-	unsigned	checksum;		// for world models only
-	unsigned	checksum2;		// for world models only
+	unsigned	checksum;
+	unsigned	checksum2;
 
 	int			bspversion;
 	qboolean	isworldmodel;
@@ -377,9 +414,16 @@ typedef struct model_s
 
 	// additional model data
 	void *extradata;
+
+	unsigned int num_vertices;
+
+	qboolean surface_colours_dirty;
+
+	float *vertcoords;
+	float *vertcolours;
+	float *verttexcoords[3];
 } model_t;
 
-//============================================================================
 
 void	Mod_Init (void);
 void	Mod_Shutdown(void);
@@ -390,5 +434,7 @@ model_t *Mod_LoadModel (model_t *mod, qboolean crash);
 
 mleaf_t *Mod_PointInLeaf (float *p, model_t *model);
 byte	*Mod_LeafPVS (mleaf_t *leaf, model_t *model);
+
+qboolean Img_HasFullbrights (byte *pixels, int size);
 
 #endif	// __MODEL__

@@ -19,18 +19,11 @@ pub fn build(b: *std.Build) void {
         .root_module = root_mod,
     });
 
-    // SDL: system on Linux, source on Windows/macOS.
-    if (target.result.os.tag == .linux) {
-        root_mod.linkSystemLibrary("SDL2", .{});
-    } else {
-        const sdl_dep = b.dependency("SDL", .{
-            .target = target,
-            .optimize = optimize,
-        });
-        root_mod.linkLibrary(sdl_dep.artifact("SDL2"));
-        root_mod.addIncludePath(sdl_dep.path("include"));
-        root_mod.addIncludePath(sdl_dep.path("include-pregen"));
-    }
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.linkLibrary(sdl_dep.artifact("SDL3"));
 
     const zlib_dep = b.dependency("zlib", .{
         .target = target,
@@ -44,20 +37,20 @@ pub fn build(b: *std.Build) void {
     });
     root_mod.linkLibrary(libpng_dep.artifact("png"));
 
-    const libjpeg_dep = b.dependency("libjpeg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    root_mod.linkLibrary(libjpeg_dep.artifact("jpeg"));
+    // shaders_gen.h built from the committed blobs in src/shaders/compiled
+    const wf = b.addWriteFiles();
+    _ = wf.add("shaders_gen.h", makeShaderHeader(b) catch @panic("src/shaders/compiled unreadable"));
+    root_mod.addIncludePath(wf.getDirectory());
+
+    addShadercrossStep(b);
 
     const c_flags = [_][]const u8{
         "-std=c23",
         "-D_GNU_SOURCE",
         "-DCLIENTONLY",
         "-DNETQW",
-        "-DGLQUAKE",
         "-DUSE_PNG=1",
-        "-DUSE_JPEG=1",
+        "-DUSE_JPEG=0",
         "-DUSE_ZLIB=1",
         "-DUSE_LUA=0",
         "-DBUILD_STRL",
@@ -94,11 +87,11 @@ pub fn build(b: *std.Build) void {
                 .files = &win_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkSystemLibrary("opengl32", .{});
             root_mod.linkSystemLibrary("ws2_32", .{});
             root_mod.linkSystemLibrary("winmm", .{});
             root_mod.linkSystemLibrary("gdi32", .{});
             root_mod.linkSystemLibrary("bcrypt", .{});
+            root_mod.linkSystemLibrary("dbghelp", .{});
             // app icon: RC writes basename, include path resolves at compile time
             root_mod.addWin32ResourceFile(.{
                 .file = b.path("src/classicq.rc"),
@@ -113,7 +106,6 @@ pub fn build(b: *std.Build) void {
                 .files = &posix_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkSystemLibrary("GL", .{});
             root_mod.linkSystemLibrary("pthread", .{});
             root_mod.linkSystemLibrary("dl", .{});
             root_mod.linkSystemLibrary("m", .{});
@@ -124,7 +116,6 @@ pub fn build(b: *std.Build) void {
                 .files = &posix_sources,
                 .flags = &c_flags,
             });
-            root_mod.linkFramework("OpenGL", .{});
             root_mod.linkSystemLibrary("pthread", .{});
             root_mod.linkSystemLibrary("m", .{});
         },
@@ -160,6 +151,9 @@ pub fn build(b: *std.Build) void {
                 else => "assets/classicq",
             };
             install_to_assets.addCopyFileToSource(exe.getEmittedBin(), bin_name);
+            // crash handler symbolizes through the pdb sitting next to the exe
+            if (os_tag == .windows and optimize == .Debug)
+                install_to_assets.addCopyFileToSource(exe.getEmittedPdb(), "assets/classicq.pdb");
         },
     }
     b.getInstallStep().dependOn(&install_to_assets.step);
@@ -199,24 +193,14 @@ const common_sources = [_][]const u8{
     "cvar.c",
     "filesystem.c",
     "fmod.c",
-    "gl_draw.c",
-    "gl_framebuffer.c",
-    "gl_mesh.c",
-    "gl_model.c",
-    "gl_ngraph.c",
-    "gl_part.c",
-    "gl_post_process.c",
-    "gl_refrag.c",
-    "gl_rlight.c",
-    "gl_rmain.c",
-    "gl_rmisc.c",
-    "gl_rpart.c",
-    "gl_rsurf.c",
-    "gl_shader.c",
-    "gl_skinimp.c",
-    "gl_state.c",
-    "gl_texture.c",
-    "gl_warp.c",
+    "gpu_alias.c",
+    "gpu_draw2d.c",
+    "gpu_part.c",
+    "gpu_rmain.c",
+    "gpu_stub.c",
+    "gpu_texture.c",
+    "gpu_vid.c",
+    "gpu_world.c",
     "host.c",
     "huffman.c",
     "image.c",
@@ -237,7 +221,10 @@ const common_sources = [_][]const u8{
     "pmovetst.c",
     "qstring.c",
     "r_draw.c",
+    "r_mesh.c",
+    "r_model.c",
     "r_part.c",
+    "r_refrag.c",
     "readablechars.c",
     "ruleset.c",
     "server_browser.c",
@@ -258,7 +245,6 @@ const common_sources = [_][]const u8{
     "utils.c",
     "version.c",
     "vid.c",
-    "vid_common_gl.c",
     "vid_mode_null.c",
     "wad.c",
     "zone.c",
@@ -284,3 +270,66 @@ const win_sources = [_][]const u8{
     "sys_lib_null.c",
     "thread_win32.c",
 };
+
+fn shaderNameLessThan(_: void, a: []const u8, c: []const u8) bool {
+    return std.mem.lessThan(u8, a, c);
+}
+
+// C header with one byte array per blob, symbol = filename with dots as underscores
+fn makeShaderHeader(b: *std.Build) ![]const u8 {
+    const alloc = b.allocator;
+    const io = b.graph.io;
+
+    var dir = try b.build_root.handle.openDir(io, "src/shaders/compiled", .{ .iterate = true });
+    defer dir.close(io);
+
+    var names: std.ArrayList([]const u8) = .empty;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| {
+        if (e.kind == .file)
+            try names.append(alloc, b.dupe(e.name));
+    }
+    std.mem.sort([]const u8, names.items, {}, shaderNameLessThan);
+
+    var out: std.ArrayList(u8) = .empty;
+    try out.appendSlice(alloc, "// generated by build.zig from src/shaders/compiled, do not edit\n\n");
+    for (names.items) |name| {
+        const data = try dir.readFileAlloc(io, name, alloc, .unlimited);
+        const sym = b.dupe(name);
+        for (sym) |*ch| {
+            if (ch.* == '.') ch.* = '_';
+        }
+        try out.appendSlice(alloc, b.fmt("static const unsigned char {s}[] = {{\n", .{sym}));
+        var buf: [8]u8 = undefined;
+        for (data, 0..) |byte, i| {
+            const s = std.fmt.bufPrint(&buf, "{d},", .{byte}) catch unreachable;
+            try out.appendSlice(alloc, s);
+            if (i % 16 == 15)
+                try out.append(alloc, '\n');
+        }
+        try out.appendSlice(alloc, "\n};\n");
+    }
+    return out.items;
+}
+
+// zig build shaders: HLSL -> SPIRV/DXIL/MSL via shadercross (PATH or SHADERCROSS env)
+fn addShadercrossStep(b: *std.Build) void {
+    const step = b.step("shaders", "Recompile HLSL shaders into src/shaders/compiled (needs shadercross)");
+    const exe = b.graph.environ_map.get("SHADERCROSS") orelse "shadercross";
+
+    const io = b.graph.io;
+    var dir = b.build_root.handle.openDir(io, "src/shaders", .{ .iterate = true }) catch @panic("src/shaders unreadable");
+    defer dir.close(io);
+
+    var it = dir.iterate();
+    while (it.next(io) catch @panic("src/shaders unreadable")) |e| {
+        if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".hlsl"))
+            continue;
+        const base = e.name[0 .. e.name.len - 5];
+        for ([_][]const u8{ "spv", "dxil", "msl" }) |fmt| {
+            const run = b.addSystemCommand(&.{ exe, b.dupe(e.name), "-o", b.fmt("compiled/{s}.{s}", .{ base, fmt }) });
+            run.setCwd(b.path("src/shaders"));
+            step.dependOn(&run.step);
+        }
+    }
+}

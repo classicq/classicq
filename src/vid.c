@@ -22,14 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 #include "common.h"
-#ifdef GLQUAKE
-#include "gl_local.h"
-#include "gl_draw.h"
-#include "gl_texture.h"
-#else
-#include "r_shared.h"
-#include "d_local.h"
-#endif
+#include "r_local.h"
+#include "r_texture.h"
 
 #include "menu.h"
 #include "skin.h"
@@ -87,11 +81,7 @@ static qboolean in_grab_windowed_mouse_callback(cvar_t *var, char *value)
 }
 
 #warning Fixme
-#ifdef GLQUAKE
 static cvar_t vid_ref = { "vid_ref", "gl", CVAR_ROM };
-#else
-static cvar_t vid_ref = { "vid_ref", "soft", CVAR_ROM };
-#endif
 
 cvar_t vid_fullscreen = { "vid_fullscreen", "1", CVAR_ARCHIVE };
 cvar_t vid_width = { "vid_width", "640", CVAR_ARCHIVE };
@@ -105,9 +95,6 @@ cvar_t in_grab_windowed_mouse = { "in_grab_windowed_mouse", "0", CVAR_ARCHIVE, i
 
 static unsigned char pal[768];
 
-#ifndef GLQUAKE
-static void *vid_surfcache;
-#endif
 
 static void set_up_conwidth_conheight()
 {
@@ -313,38 +300,6 @@ void VID_CvarInit()
 	Sys_Video_CvarInit();
 }
 
-#ifndef GLQUAKE
-static int VID_SW_AllocBuffers(int width, int height)
-{
-	unsigned int surfcachesize;
-
-	surfcachesize = D_SurfaceCacheForRes(width, height);
-
-	d_pzbuffer = malloc(width * height * sizeof(*d_pzbuffer));
-	if (d_pzbuffer)
-	{
-		vid_surfcache = malloc(surfcachesize);
-		if (vid_surfcache)
-		{
-			D_InitCaches(vid_surfcache, surfcachesize);
-
-			return 1;
-		}
-
-		free(d_pzbuffer);
-	}
-
-	return 0;
-}
-
-static void VID_SW_FreeBuffers()
-{
-	D_FlushCaches();
-
-	free(vid_surfcache);
-	free(d_pzbuffer);
-}
-#endif
 
 void VID_Open()
 {
@@ -355,26 +310,10 @@ void VID_Open()
 	height = vid_height.value;
 
 #warning Fix this.
-#ifndef GLQUAKE
-	if (width > MAXWIDTH)
-	{
-		Com_Printf("VID: Maximum supported width is %d\n", MAXWIDTH);
-		width = MAXWIDTH;
-	}
-	if (height > MAXHEIGHT)
-	{
-		Com_Printf("VID: Maximum supported height is %d\n", MAXHEIGHT);
-		height = MAXHEIGHT;
-	}
-#endif
 
 	vid.colormap = host_colormap;
 	vid.aspect = ((float)height / (float)width) * (320.0 / 240.0);
 
-#ifndef GLQUAKE
-	vid.maxwarpwidth = WARP_WIDTH;
-	vid.maxwarpheight = WARP_HEIGHT;
-#endif
 
 	Sys_Thread_LockMutex(display_mutex);
 	display = Sys_Video_Open(vid_mode.string, width, height, fullscreen, host_basepal);
@@ -384,23 +323,12 @@ void VID_Open()
 		width = Sys_Video_GetWidth(display);
 		height = Sys_Video_GetHeight(display);
 
-#ifndef GLQUAKE
-		if (width > MAXWIDTH || height > MAXHEIGHT)
-			Sys_Error("Fullscreen display size (%dx%d) exceeds the maximum allowed display size (%dx%d)\n", width, height, MAXWIDTH, MAXHEIGHT);
-#endif
 
-#ifndef GLQUAKE
-		if (VID_SW_AllocBuffers(width, height))
-#endif
 		{
 			vid.numpages = Sys_Video_GetNumBuffers(display);
 
 			set_up_conwidth_conheight();
 
-#ifndef GLQUAKE
-			vid.rowbytes = Sys_Video_GetBytesPerRow(display);
-			vid.buffer = Sys_Video_GetBuffer(display);
-#endif
 
 			if (windowtitle)
 				Sys_Video_SetWindowTitle(display, windowtitle);
@@ -411,15 +339,13 @@ void VID_Open()
 			R_Init();
 
 			V_UpdatePalette(true);
-#ifdef GLQUAKE
 			Check_Gamma(host_basepal);
 			VID_SetPalette(host_basepal);
 
 			vid.recalc_refdef = 1;				// force a surface cache flush
 
 			R_InitGL();
-			GL_Particles_TextureInit();
-#endif
+			R_Particles_TextureInit();
 
 			Draw_Init();
 			M_VidInit();
@@ -446,9 +372,6 @@ void VID_Close()
 {
 	Sys_Thread_LockMutex(display_mutex);
 
-#ifndef GLQUAKE
-	VID_SW_FreeBuffers();
-#endif
 
 	Skin_Shutdown();
 	Mod_ClearAll();
@@ -468,30 +391,17 @@ void VID_Close()
 	Sys_Thread_UnlockMutex(display_mutex);
 }
 
-#ifdef GLQUAKE
 void VID_BeginFrame()
 {
 	Sys_Video_BeginFrame(display);
 }
-#endif
 
 void VID_Update(vrect_t *rects)
 {
 	Sys_Video_Update(display, rects);
 
-#ifndef GLQUAKE
-#warning Fixme, this is a sucky place to put this.
-	vid.buffer = Sys_Video_GetBuffer(display);
-#endif
 }
 
-#ifndef GLQUAKE
-void VID_SetPalette(byte *palette)
-{
-	memcpy(pal, palette, sizeof(pal));
-	Sys_Video_SetPalette(display, palette);
-}
-#endif
 
 
 int VID_GetKeyEvent(keynum_t *key, qboolean *down)
@@ -521,7 +431,6 @@ void VID_SetMouseGrab(int on)
 	refresh_mouse_grab_state();
 }
 
-#ifdef GLQUAKE
 void VID_SetDeviceGammaRamp(unsigned short *ramps)
 {
 	Sys_Video_SetGamma(display, ramps);
@@ -531,12 +440,6 @@ qboolean VID_HWGammaSupported()
 {
 	return Sys_Video_HWGammaSupported(display);
 }
-
-void *VID_GetProcAddress(const char *name)
-{
-	return Sys_Video_GetProcAddress(display, name);
-}
-#endif
 
 void VID_SetCaption(const char *text)
 {

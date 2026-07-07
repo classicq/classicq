@@ -107,10 +107,8 @@ extern	entity_t	r_worldentity;
 void R_CvarInit(void);
 int R_Init(void);
 void R_Shutdown(void);
-#ifdef GLQUAKE
 int R_InitTextures(void);
 void R_ShutdownTextures(void);
-#endif
 void R_InitEfrags (void);
 void R_RenderView (void);		// must set r_refdef first
 void R_ViewChanged (vrect_t *pvrect, int lineadj, float aspect);
