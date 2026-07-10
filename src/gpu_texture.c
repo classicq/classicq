@@ -328,17 +328,21 @@ static void scale_dimensions(int width, int height, int *scaled_width, int *scal
 	*scaled_height = max(1, h);
 }
 
+// mag filter depends only on the gl_nearest/gl_linear prefix
+int GPU_PrefsForTexturemode(void)
+{
+	int nearest;
+
+	nearest = Q_strcasecmp(gl_texturemode.string, "gl_nearest") == 0
+		|| Q_strncasecmp(gl_texturemode.string, "gl_nearest_", 11) == 0;
+
+	return nearest ? 0 : GPU_TEXPREF_LINEAR;
+}
+
 static int prefs_for_mode(int mode)
 {
-	int linear;
-
-	if (mode & TEX_MIPMAP)
-		linear = Q_strcasecmp(gl_texturemode.string, "gl_nearest") != 0
-			&& Q_strncasecmp(gl_texturemode.string, "gl_nearest_", 11) != 0;
-	else
-		linear = gl_filter_max != 0x2600;	// GL_NEAREST
-
-	return linear ? GPU_TEXPREF_LINEAR : 0;
+	(void)mode;
+	return GPU_PrefsForTexturemode();
 }
 
 void R_Upload32(unsigned *data, int width, int height, int mode)
