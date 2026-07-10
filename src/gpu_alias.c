@@ -561,7 +561,7 @@ struct SkinImp *SkinImp_CreateSolidColour(float *colours)
 
 	skinimp->texid = texture_extension_number++;
 	skinimp->fbtexid = 0;
-	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA(tex, 1, 1, 0), 1, 1, GPU_TEXPREF_LINEAR);
+	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA(tex, 1, 1, 0), 1, 1, GPU_PrefsForTexturemode());
 
 	return skinimp;
 }
@@ -603,7 +603,7 @@ struct SkinImp *SkinImp_CreateTexturePaletted(void *data, unsigned int width, un
 
 	skinimp->texid = texture_extension_number++;
 	skinimp->fbtexid = 0;
-	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA((unsigned char *)skinmem, width, height, 0), width, height, GPU_TEXPREF_LINEAR);
+	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA((unsigned char *)skinmem, width, height, 0), width, height, GPU_PrefsForTexturemode());
 
 	if (dofullbright)
 	{
@@ -622,7 +622,7 @@ struct SkinImp *SkinImp_CreateTexturePaletted(void *data, unsigned int width, un
 		}
 
 		skinimp->fbtexid = texture_extension_number++;
-		GPU_Texture_Set(skinimp->fbtexid, GPU_CreateTextureRGBA((unsigned char *)skinmem, width, height, 0), width, height, GPU_TEXPREF_LINEAR);
+		GPU_Texture_Set(skinimp->fbtexid, GPU_CreateTextureRGBA((unsigned char *)skinmem, width, height, 0), width, height, GPU_PrefsForTexturemode());
 	}
 
 	free(skinmem);
@@ -640,7 +640,7 @@ struct SkinImp *SkinImp_CreateTextureTruecolour(void *data, unsigned int width, 
 
 	skinimp->texid = texture_extension_number++;
 	skinimp->fbtexid = 0;
-	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA(data, width, height, 0), width, height, GPU_TEXPREF_LINEAR);
+	GPU_Texture_Set(skinimp->texid, GPU_CreateTextureRGBA(data, width, height, 0), width, height, GPU_PrefsForTexturemode());
 
 	return skinimp;
 }

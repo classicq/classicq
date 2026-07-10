@@ -1266,10 +1266,27 @@ void GPU_EndFrame(void)
 				if (frames == 380)
 					Cbuf_AddText("vid_fullscreen 0\nvid_width 1600\nvid_height 900\nvid_restart\n");
 			}
-			if (frames == shotframe)
-				Cbuf_AddText("screenshot autoshot\n");
-			if (frames == shotframe + 10)
-				Host_Quit();
+			// -autoshotstep K: from shotframe on, screenshot every K frames until shotframe+10K
+			if (frames >= shotframe)
+			{
+				int step = 0, parm = COM_CheckParm("-autoshotstep");
+				if (parm && parm + 1 < com_argc)
+					step = max(1, Q_atoi(com_argv[parm + 1]));
+				if (step)
+				{
+					if ((frames - shotframe) % step == 0 && frames < shotframe + 10 * step)
+						Cbuf_AddText(va("screenshot autoshot_%d\n", frames));
+					if (frames == shotframe + 10 * step)
+						Host_Quit();
+				}
+				else
+				{
+					if (frames == shotframe)
+						Cbuf_AddText("screenshot autoshot\n");
+					if (frames == shotframe + 10)
+						Host_Quit();
+				}
+			}
 		}
 	}
 }
