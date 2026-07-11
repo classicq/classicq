@@ -36,6 +36,7 @@ struct netaddr
 
 struct SysNetData;
 struct SysSocket;
+struct SysTCPSocket;
 
 struct SysNetData *Sys_Net_Init(void);
 void Sys_Net_Shutdown(struct SysNetData *netdata);
@@ -49,6 +50,11 @@ qboolean Sys_Net_Bind(struct SysNetData *netdata, struct SysSocket *socket, unsi
 int Sys_Net_Send(struct SysNetData *netdata, struct SysSocket *socket, const void *data, int datalen, const struct netaddr *address);
 int Sys_Net_Receive(struct SysNetData *netdata, struct SysSocket *socket, void *data, int datalen, struct netaddr *address);
 void Sys_Net_Wait(struct SysNetData *netdata, struct SysSocket *socket, unsigned int timeout_us);
+
+struct SysTCPSocket *Sys_Net_TCPConnect(struct SysNetData *netdata, const struct netaddr *address, unsigned int timeout_us);
+void Sys_Net_TCPClose(struct SysNetData *netdata, struct SysTCPSocket *socket);
+int Sys_Net_TCPSend(struct SysNetData *netdata, struct SysTCPSocket *socket, const void *data, int datalen);
+int Sys_Net_TCPReceive(struct SysNetData *netdata, struct SysTCPSocket *socket, void *data, int datalen);
 
 #endif
 

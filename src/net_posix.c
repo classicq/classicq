@@ -375,3 +375,135 @@ void Sys_Net_Wait(struct SysNetData *netdata, struct SysSocket *socket, unsigned
 #endif
 }
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+struct SysTCPSocket
+{
+	int s;
+};
+
+struct SysTCPSocket *Sys_Net_TCPConnect(struct SysNetData *netdata, const struct netaddr *address, unsigned int timeout_us)
+{
+	struct SysTCPSocket *s;
+	socklen_t addrsize;
+	union
+	{
+		struct sockaddr_in addr;
+		struct sockaddr_in6 addr6;
+	} addr;
+	struct timeval tv;
+	fd_set wfds;
+	fd_set efds;
+	int one;
+	int zero;
+	int err;
+	socklen_t errlen;
+	int domain;
+	int r;
+
+	one = 1;
+	zero = 0;
+
+	if (address->type == NA_IPV4)
+	{
+		domain = AF_INET;
+		addr.addr.sin_family = AF_INET;
+		addr.addr.sin_port = htons(address->addr.ipv4.port);
+		memcpy(&addr.addr.sin_addr.s_addr, address->addr.ipv4.address, 4);
+		addrsize = sizeof(addr.addr);
+	}
+	else if (address->type == NA_IPV6)
+	{
+		domain = AF_INET6;
+		addr.addr6.sin6_family = AF_INET6;
+		addr.addr6.sin6_port = htons(address->addr.ipv6.port);
+		memcpy(&addr.addr6.sin6_addr, address->addr.ipv6.address, sizeof(addr.addr6.sin6_addr));
+		addr.addr6.sin6_flowinfo = 0;
+		addr.addr6.sin6_scope_id = 0;
+		addrsize = sizeof(addr.addr6);
+	}
+	else
+		return 0;
+
+	s = malloc(sizeof(*s));
+	if (s)
+	{
+		s->s = socket(domain, SOCK_STREAM, 0);
+		if (s->s != -1)
+		{
+#ifdef SO_NOSIGPIPE
+			setsockopt(s->s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
+
+			if (ioctl(s->s, FIONBIO, &one) == 0)
+			{
+				r = connect(s->s, (struct sockaddr *)&addr, addrsize);
+				if (r == 0 || errno == EINPROGRESS)
+				{
+					FD_ZERO(&wfds);
+					FD_SET(s->s, &wfds);
+					FD_ZERO(&efds);
+					FD_SET(s->s, &efds);
+
+					tv.tv_sec = timeout_us / 1000000;
+					tv.tv_usec = timeout_us % 1000000;
+
+					if (select(s->s + 1, 0, &wfds, &efds, &tv) == 1 && FD_ISSET(s->s, &wfds))
+					{
+						err = 0;
+						errlen = sizeof(err);
+						if (getsockopt(s->s, SOL_SOCKET, SO_ERROR, &err, &errlen) == 0 && err == 0)
+						{
+							ioctl(s->s, FIONBIO, &zero);
+
+							tv.tv_sec = timeout_us / 1000000;
+							tv.tv_usec = timeout_us % 1000000;
+							setsockopt(s->s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+							setsockopt(s->s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+							return s;
+						}
+					}
+				}
+			}
+
+			close(s->s);
+		}
+
+		free(s);
+	}
+
+	return 0;
+}
+
+void Sys_Net_TCPClose(struct SysNetData *netdata, struct SysTCPSocket *socket)
+{
+	close(socket->s);
+	free(socket);
+}
+
+int Sys_Net_TCPSend(struct SysNetData *netdata, struct SysTCPSocket *socket, const void *data, int datalen)
+{
+	int sent;
+	int r;
+
+	sent = 0;
+	while(sent < datalen)
+	{
+		r = send(socket->s, (const char *)data + sent, datalen - sent, MSG_NOSIGNAL);
+		if (r <= 0)
+			return -1;
+
+		sent += r;
+	}
+
+	return sent;
+}
+
+int Sys_Net_TCPReceive(struct SysNetData *netdata, struct SysTCPSocket *socket, void *data, int datalen)
+{
+	return recv(socket->s, data, datalen, 0);
+}
+

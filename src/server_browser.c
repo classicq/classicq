@@ -61,6 +61,7 @@ static int qtv_connect_pending;
 static double qtv_connect_time;
 
 static cvar_t sb_masterserver = {"sb_masterserver", "master.quakeservers.net:27000 qwmaster.fodquake.net:27000 master.quakeworld.nu:27000"};
+static cvar_t sb_masterserver_http = {"sb_masterserver_http", "http://hubapi.quakeworld.nu/v2/masters/master.quakeservers.net:27000 http://hubapi.quakeworld.nu/v2/masters/qwmaster.fodquake.net:27000 http://hubapi.quakeworld.nu/v2/masters/master.quakeworld.nu:27000"};
 static cvar_t sb_player_drawing = {"sb_player_drawing", "1"};
 static cvar_t sb_refresh_on_activate = {"sb_refresh_on_activate", "0"};
 
@@ -557,7 +558,7 @@ static void SB_Refresh(void)
 	sb_qw_server = NULL;
 	current_selected_server = NULL;
 	sb_qw_server_count = 0;
-	serverscanner = ServerScanner_Create(sb_masterserver.string);
+	serverscanner = ServerScanner_Create(sb_masterserver.string, sb_masterserver_http.string);
 	if (serverscanner == NULL)
 		SB_Set_Statusbar("error creating server scanner!");
 
@@ -2779,6 +2780,7 @@ void SB_CvarInit(void)
 	SB_AddMacros();
 
 	Cvar_Register(&sb_masterserver);
+	Cvar_Register(&sb_masterserver_http);
 	Cvar_Register(&sb_player_drawing);
 	Cvar_Register(&sb_refresh_on_activate);
 	Cvar_Register(&sb_debug);

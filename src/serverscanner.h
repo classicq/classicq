@@ -71,7 +71,7 @@ struct QWServer
 	unsigned int numspectators;
 };
 
-struct ServerScanner *ServerScanner_Create(const char *masters);
+struct ServerScanner *ServerScanner_Create(const char *masters, const char *httpsources);
 void ServerScanner_Delete(struct ServerScanner *serverscanner);
 
 void ServerScanner_DoStuff(struct ServerScanner *serverscanner);

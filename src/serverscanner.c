@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "sys_thread.h"
 #include "sys_net.h"
 #include "serverscanner.h"
+#include "httplist.h"
 #include "utils.h"
 
 extern cvar_t sb_debug;
@@ -32,6 +33,9 @@ extern cvar_t sb_debug;
 #define MAXCONCURRENTPINGS 32
 #define PINGINTERVAL 5000
 #define QWSERVERTIMEOUT 750000
+#define HTTPFALLBACKDELAY 500000
+#define HTTPFETCHDEADLINE 5000000
+#define MAXHTTPADDRS 4096
 
 #warning Needs to reattempt scan/ping
 
@@ -75,6 +79,15 @@ struct ServerScanner
 	unsigned long long lastpingtime;
 	volatile enum ServerScannerStatus status;
 	unsigned int updated;
+
+	char *httpsources;
+	struct SysThread *httpthread;
+	struct netaddr *httpaddrs;
+	unsigned int numhttpaddrs;
+	unsigned int httpstarted;
+	unsigned int httpdone;
+	unsigned int httpchecked;
+	unsigned int masterreplied;
 
 	unsigned long long debug_t0;
 	unsigned int debug_first_master_done;
@@ -525,6 +538,93 @@ static void ServerScanner_Thread_SendQWPingRequest(struct ServerScanner *servers
 	serverscanner->lastpingtime = curtime;
 }
 
+/* Caller must hold the mutex */
+static struct qwserverpriv *ServerScanner_AddServer(struct ServerScanner *serverscanner, const struct netaddr *newaddr)
+{
+	struct qwserverpriv *qwserver;
+
+	if (serverscanner->numqwservers > 10000)
+		return 0;
+
+#warning Slow as fucking hell.
+	qwserver = serverscanner->qwservers;
+	while(qwserver)
+	{
+		if (NET_CompareAdr(newaddr, &qwserver->pub.addr))
+			return 0;
+
+		qwserver = qwserver->next;
+	}
+
+	qwserver = malloc(sizeof(*qwserver));
+	if (qwserver == 0)
+		return 0;
+
+	memset(qwserver, 0, sizeof(*qwserver));
+
+	qwserver->pub.addr = *newaddr;
+	qwserver->pub.status = QWSS_WAITING;
+
+	qwserver->next = serverscanner->qwservers;
+	serverscanner->qwservers = qwserver;
+	serverscanner->numqwservers++;
+
+	return qwserver;
+}
+
+static void ServerScanner_HttpThread(void *arg)
+{
+	struct ServerScanner *serverscanner;
+	struct netaddr *addrs;
+	unsigned int numaddrs;
+	unsigned int urladdrs;
+	unsigned long long deadline;
+	const char *p;
+	const char *p2;
+	char url[512];
+
+	serverscanner = arg;
+
+	deadline = Sys_IntTime() + HTTPFETCHDEADLINE;
+
+	numaddrs = 0;
+	addrs = malloc(sizeof(*addrs)*MAXHTTPADDRS);
+	if (addrs)
+	{
+		p = serverscanner->httpsources;
+		while(*p && !serverscanner->quit && numaddrs < MAXHTTPADDRS && Sys_IntTime() < deadline)
+		{
+			p2 = strchr(p, ' ');
+			if (p2 == 0)
+				p2 = p + strlen(p);
+
+			if (p2 != p && p2 - p < sizeof(url))
+			{
+				memcpy(url, p, p2 - p);
+				url[p2 - p] = 0;
+
+				urladdrs = HTTPList_Fetch(serverscanner->netdata, url, addrs + numaddrs, MAXHTTPADDRS - numaddrs, &serverscanner->quit, deadline);
+				numaddrs += urladdrs;
+
+				if (sb_debug.value)
+					Com_Printf("SB: t=%llums    http source %s: %u addresses\n", debug_elapsed_ms(serverscanner), url, urladdrs);
+			}
+
+			p = p2;
+			if (*p)
+				p++;
+		}
+	}
+
+	Sys_Thread_LockMutex(serverscanner->mutex);
+
+	serverscanner->httpaddrs = addrs;
+	serverscanner->numhttpaddrs = numaddrs;
+	serverscanner->httpdone = 1;
+
+	Sys_Thread_UnlockMutex(serverscanner->mutex);
+}
+
 static void ServerScanner_Thread_HandlePacket(struct ServerScanner *serverscanner, unsigned char *data, unsigned int datalen, struct netaddr *addr)
 {
 	struct qwserverpriv *qwserver;
@@ -592,11 +692,12 @@ static void ServerScanner_Thread_HandlePacket(struct ServerScanner *serverscanne
 				serverscanner->debug_first_master_done = 1;
 			}
 
+			Sys_Thread_LockMutex(serverscanner->mutex);
+
+			serverscanner->masterreplied = 1;
+
 			for(i=0;i<datalen;i+=6)
 			{
-				if (serverscanner->numqwservers > 10000)
-					return;
-
 				newaddr.type = NA_IPV4;
 				newaddr.addr.ipv4.address[0] = data[i + 0];
 				newaddr.addr.ipv4.address[1] = data[i + 1];
@@ -604,51 +705,23 @@ static void ServerScanner_Thread_HandlePacket(struct ServerScanner *serverscanne
 				newaddr.addr.ipv4.address[3] = data[i + 3];
 				newaddr.addr.ipv4.port = (data[i + 4]<<8)|data[i + 5];
 
-#warning Slow as fucking hell.
-				qwserver = serverscanner->qwservers;
-				while(qwserver)
+				qwserver = ServerScanner_AddServer(serverscanner, &newaddr);
+				if (qwserver)
 				{
-					if (NET_CompareAdr(&newaddr, &qwserver->pub.addr))
-						break;
-
-					qwserver = qwserver->next;
+					if (serverscanner->numqwserversscaninprogress < MAXCONCURRENTSCANS)
+					{
+						ServerScanner_Thread_SendQWRequest(serverscanner, qwserver);
+					}
+					else
+					{
+						qwserver->nextscanwaiting = serverscanner->qwserversscanwaiting;
+						serverscanner->qwserversscanwaiting = qwserver;
+					}
 				}
-
-				if (qwserver && NET_CompareAdr(&newaddr, &qwserver->pub.addr))
-				{
-					continue;
-				}
-
-				qwserver = malloc(sizeof(*qwserver));
-				if (qwserver == 0)
-					break;
-
-				memset(qwserver, 0, sizeof(*qwserver));
-
-				qwserver->pub.addr = newaddr;
-				qwserver->pub.status = QWSS_WAITING;
-
-				if (serverscanner->numqwserversscaninprogress < MAXCONCURRENTSCANS)
-				{
-					ServerScanner_Thread_SendQWRequest(serverscanner, qwserver);
-				}
-				else
-				{
-					qwserver->nextscanwaiting = serverscanner->qwserversscanwaiting;
-					serverscanner->qwserversscanwaiting = qwserver;
-				}
-
-				Sys_Thread_LockMutex(serverscanner->mutex);
-
-				qwserver->next = serverscanner->qwservers;
-				serverscanner->qwservers = qwserver;
-				serverscanner->numqwservers++;
-
-				Sys_Thread_UnlockMutex(serverscanner->mutex);
 			}
 
-			Sys_Thread_LockMutex(serverscanner->mutex);
 			serverscanner->updated = 1;
+
 			Sys_Thread_UnlockMutex(serverscanner->mutex);
 
 			return;
@@ -753,7 +826,7 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 	unsigned long long curtime;
 	unsigned int timeout;
 	int r;
-	unsigned char buf[8192];
+	unsigned char buf[65536];
 	struct netaddr addr;
 
 	if (serverscanner->status == SSS_ERROR || serverscanner->status == SSS_IDLE)
@@ -770,7 +843,10 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 		ServerScanner_Thread_LookUpMasters(serverscanner);
 		ServerScanner_Thread_OpenSockets(serverscanner);
 
-		if (!serverscanner->numvalidmasterservers)
+		if (serverscanner->httpsources && serverscanner->sockets[NA_IPV4] == 0)
+			serverscanner->sockets[NA_IPV4] = Sys_Net_CreateSocket(serverscanner->netdata, NA_IPV4);
+
+		if (!serverscanner->numvalidmasterservers && serverscanner->sockets[NA_IPV4] == 0)
 		{
 			serverscanner->status = SSS_ERROR;
 			return 50000;
@@ -802,9 +878,47 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 
 	ServerScanner_Thread_CheckTimeout(serverscanner);
 
+	if (serverscanner->httpsources && !serverscanner->httpstarted && !serverscanner->masterreplied
+		&& Sys_IntTime() >= serverscanner->starttime + HTTPFALLBACKDELAY)
+	{
+		serverscanner->httpstarted = 1;
+		serverscanner->httpthread = Sys_Thread_CreateThread(ServerScanner_HttpThread, serverscanner);
+		if (serverscanner->httpthread == 0)
+			serverscanner->httpchecked = 1;
+		else if (sb_debug.value)
+			Com_Printf("SB: t=%llums    no master reply, trying http fallback\n", debug_elapsed_ms(serverscanner));
+	}
+
+	if (serverscanner->httpstarted && !serverscanner->httpchecked && serverscanner->httpdone)
+	{
+		serverscanner->httpchecked = 1;
+
+		if (serverscanner->numqwservers == 0 && serverscanner->numhttpaddrs)
+		{
+			for(i=0;i<serverscanner->numhttpaddrs;i++)
+			{
+				qwserver = ServerScanner_AddServer(serverscanner, &serverscanner->httpaddrs[i]);
+				if (qwserver)
+				{
+					qwserver->nextscanwaiting = serverscanner->qwserversscanwaiting;
+					serverscanner->qwserversscanwaiting = qwserver;
+				}
+			}
+
+			serverscanner->updated = 1;
+
+			if (sb_debug.value)
+				Com_Printf("SB: t=%llums    http fallback added %u servers\n", debug_elapsed_ms(serverscanner), serverscanner->numqwservers);
+		}
+
+		free(serverscanner->httpaddrs);
+		serverscanner->httpaddrs = 0;
+	}
+
 	if (serverscanner->status == SSS_SCANNING)
 	{
 		if (serverscanner->qwserversscanwaiting == 0 && serverscanner->qwserversscaninprogress == 0
+			&& !(serverscanner->httpstarted && !serverscanner->httpchecked && serverscanner->numqwservers == 0)
 			&& (serverscanner->numqwservers > 0 || Sys_IntTime() > serverscanner->starttime + 2000000))
 		{
 			serverscanner->status = SSS_PINGING;
@@ -917,12 +1031,18 @@ static void ServerScanner_Thread(void *arg)
 			Sys_MicroSleep(timeout);
 	}
 
+	if (serverscanner->httpthread)
+	{
+		Sys_Thread_DeleteThread(serverscanner->httpthread);
+		serverscanner->httpthread = 0;
+	}
+
 	ServerScanner_Thread_CloseSockets(serverscanner);
 
 	ServerScanner_Thread_Deinit(serverscanner);
 }
 
-struct ServerScanner *ServerScanner_Create(const char *masters)
+struct ServerScanner *ServerScanner_Create(const char *masters, const char *httpsources)
 {
 	struct ServerScanner *serverscanner;
 	unsigned int nummasterservers;
@@ -956,6 +1076,9 @@ struct ServerScanner *ServerScanner_Create(const char *masters)
 	if (serverscanner)
 	{
 		memset(serverscanner, 0, sizeof(*serverscanner));
+
+		if (httpsources && *httpsources)
+			serverscanner->httpsources = strdup(httpsources);
 
 		serverscanner->masterservers = malloc(sizeof(*serverscanner->masterservers)*nummasterservers);
 		if (serverscanner->masterservers)
@@ -1011,6 +1134,7 @@ struct ServerScanner *ServerScanner_Create(const char *masters)
 			}
 		}
 
+		free(serverscanner->httpsources);
 		free(serverscanner);
 	}
 
@@ -1027,7 +1151,12 @@ void ServerScanner_Delete(struct ServerScanner *serverscanner)
 	if (serverscanner->thread)
 		Sys_Thread_DeleteThread(serverscanner->thread);
 	else
+	{
+		if (serverscanner->httpthread)
+			Sys_Thread_DeleteThread(serverscanner->httpthread);
+
 		ServerScanner_Thread_CloseSockets(serverscanner);
+	}
 
 	Sys_Thread_DeleteMutex(serverscanner->mutex);
 
@@ -1050,6 +1179,9 @@ void ServerScanner_Delete(struct ServerScanner *serverscanner)
 	}
 
 	free(serverscanner->masterservers);
+
+	free(serverscanner->httpaddrs);
+	free(serverscanner->httpsources);
 
 	free(serverscanner);
 }
@@ -1191,9 +1323,9 @@ int main()
 	unsigned int numdown;
 
 #if 1
-	serverscanner = ServerScanner_Create("asgaard.morphos-team.net:27000 master.quakeservers.net:27000");
+	serverscanner = ServerScanner_Create("asgaard.morphos-team.net:27000 master.quakeservers.net:27000", 0);
 #else
-	serverscanner = ServerScanner_Create("127.0.0.1:27000");
+	serverscanner = ServerScanner_Create("127.0.0.1:27000", 0);
 #endif
 	if (serverscanner)
 	{
