@@ -202,6 +202,7 @@ const common_sources = [_][]const u8{
     "gpu_vid.c",
     "gpu_world.c",
     "host.c",
+    "httplist.c",
     "huffman.c",
     "image.c",
     "keys.c",
