@@ -826,7 +826,7 @@ unsigned int ServerScanner_DoStuffInternal(struct ServerScanner *serverscanner)
 	unsigned long long curtime;
 	unsigned int timeout;
 	int r;
-	unsigned char buf[8192];
+	unsigned char buf[65536];
 	struct netaddr addr;
 
 	if (serverscanner->status == SSS_ERROR || serverscanner->status == SSS_IDLE)
