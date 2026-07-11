@@ -11,7 +11,7 @@
 #endif
 
 #define	QW_VERSION              2.40
-#define CLASSICQ_VERSION        "3.2.1" COMPILERVERSIONSTRINGAPPEND
+#define CLASSICQ_VERSION        "3.2.2" COMPILERVERSIONSTRINGAPPEND
 
 #if defined(_WIN32) || defined(_WIN64)
 #define QW_PLATFORM     "Windows"

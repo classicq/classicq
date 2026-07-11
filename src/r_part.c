@@ -56,15 +56,10 @@ void Classic_LoadParticleTextures (void)
 	for (i = 0; i < 32 * 32; i++)
 		((unsigned int*) data)[i] = COLOURMASK_RGBA;
 
-	// draw a circle in the top left corner
+	// draw a square in the top left corner
 	for (x = 0; x < 16; x++)
-	{
 		for (y = 0; y < 16; y++)
-		{
-			if ((x - 7.5) * (x - 7.5) + (y - 7.5) * (y - 7.5) <= 8 * 8)
-				data[y][x] = 0xFFFFFFFF;	// solid white
-		}
-	}
+			data[y][x] = 0xFFFFFFFF;	// solid white
 
 	R_Upload32 ((unsigned int*) data, 32, 32, TEX_MIPMAP | TEX_ALPHA | TEX_NOSCALE);
 }
