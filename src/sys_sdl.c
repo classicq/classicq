@@ -62,18 +62,20 @@ void Sys_Printf(char *fmt, ...)
 void Sys_Error(char *error, ...)
 {
 	static int in_error;
+	char text[1024];
 	va_list ap;
 
-	fprintf(stderr, "FATAL: ");
 	va_start(ap, error);
-	vfprintf(stderr, error, ap);
+	vsnprintf(text, sizeof(text), error, ap);
 	va_end(ap);
-	fprintf(stderr, "\n");
+
+	fprintf(stderr, "FATAL: %s\n", text);
 
 	if (!in_error)
 	{
 		in_error = 1;
 		Host_Shutdown();
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "classicQ fatal error", text, NULL);
 	}
 
 	exit(1);
@@ -338,8 +340,15 @@ static LONG WINAPI Sys_CrashHandler(EXCEPTION_POINTERS *info)
 	int i;
 	void *addr = info->ExceptionRecord->ExceptionAddress;
 	char *base = (char *)GetModuleHandleA(NULL);
+	char path[MAX_PATH];
+	DWORD n;
 
-	f = fopen("crash.txt", "w");
+	n = GetModuleFileNameA(NULL, path, sizeof(path) - 16);
+	while (n && path[n - 1] != '\\' && path[n - 1] != '/')
+		n--;
+	strcpy(path + n, "crash.txt");
+
+	f = fopen(path, "w");
 	if (!f)
 		return EXCEPTION_CONTINUE_SEARCH;
 
