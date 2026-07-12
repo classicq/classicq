@@ -30,7 +30,7 @@ extern unsigned d_8to24table2[256];
 extern float vid_gamma;
 extern byte vid_gamma_table[256];
 
-#define MAX_GPUTEXTURES 4096
+#define MAX_GPUTEXTURES 16384
 
 struct texentry
 {
@@ -450,7 +450,11 @@ int R_LoadTexture(char *identifier, int width, int height, byte *data, int mode,
 	if (!glt)
 	{
 		if (numgltextures >= MAX_GLTEXTURES)
-			Sys_Error("R_LoadTexture: cache full");
+		{
+			// cache only dedups re-uploads, dropping it costs re-upload not correctness
+			Com_Printf("R_LoadTexture: identifier cache full, resetting\n");
+			numgltextures = 0;
+		}
 		glt = &gltextures[numgltextures++];
 		memset(glt, 0, sizeof(*glt));
 		if (identifier)
