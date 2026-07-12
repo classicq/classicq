@@ -12,6 +12,16 @@ You'll need `pak0.pak` and `pak1.pak` from a licensed copy of Quake. Available o
 
 With those in hand, grab the classicQ binary from [the releases page](https://github.com/classicq/classicq/releases) and drop the `.pak` files into `id1/`.
 
+### macOS
+
+Gatekeeper might claim the downloaded app is "damaged". It isn't - the app is just not notarized with Apple. Clear the quarantine flag and it runs fine:
+
+```
+xattr -cr classicq-macos-arm64.app
+```
+
+To be precise: "damaged" is Apple-speak for "nobody paid us the $99/year protection money for a certificate of not-being-damaged".
+
 ## Build from source
 
 1. Install [Zig](https://ziglang.org/download/).
