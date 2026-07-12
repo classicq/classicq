@@ -2369,7 +2369,8 @@ static void World_BuildModelBuffer(model_t *m)
 	if (!total)
 		return;
 
-	if (total > 131072)
+	// sanity guard for corrupt data; big community maps exceed 150k legitimately
+	if (total > (1 << 22))
 	{
 		Com_Printf("Model \"%s\" has %u verts, not building a vertex buffer\n", m->name, total);
 		return;
