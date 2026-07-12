@@ -1313,7 +1313,7 @@ static void applySoftGammaToBuffer(byte *buffer, int size) {
 	extern cvar_t v_gamma, v_contrast;
 	extern float v_blend[4];
 	extern float vid_gamma;
-	float g  = v_gamma.value;
+	float g  = v_gamma.value * R_PostProcess_CrtGamma();
 	float ct = v_contrast.value;
 	float ba = v_blend[3];
 	float br = v_blend[0], bgv = v_blend[1], bb = v_blend[2];

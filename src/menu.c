@@ -4204,6 +4204,11 @@ void M_Init()
 			static const int maxfps_presets[] = {77, 154, 231, 308, 385, 462, 616, 770, 924, 1001};
 			Menu_AddItem(optionsmenu, MenuItemCvarValuePreset_Create("fps limit", &cl_maxfps, maxfps_presets, sizeof(maxfps_presets)/sizeof(maxfps_presets[0])));
 		}
+		{
+			extern cvar_t r_crt_phosphor, r_crt_dotbloom;
+			Menu_AddItem(optionsmenu, MenuItemCvarBoolean_Create("CRT phosphor", &r_crt_phosphor, 0));
+			Menu_AddItem(optionsmenu, MenuItemCvarBoolean_Create("CRT dot & bloom", &r_crt_dotbloom, 0));
+		}
 		Menu_AddItem(optionsmenu, MenuItemButton_Create("Video modes", 0, M_Menu_Video_f));
 
 		Menu_AddItem(optionsmenu, optionsmenu_usemouse = MenuItemCvarBoolean_Create("Use mouse", &in_grab_windowed_mouse, 0));

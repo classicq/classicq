@@ -32,6 +32,7 @@ static SDL_Window *gpu_window;
 
 static SDL_GPUTexture *scene_color;
 static SDL_GPUTexture *scene_depth;
+static SDL_GPUTexture *crt_tex[2];
 static SDL_GPUTextureFormat scene_depth_format;
 static SDL_GPUTextureFormat swapchain_format;
 static unsigned int scene_width, scene_height;
@@ -41,6 +42,8 @@ static SDL_GPUCommandBuffer *frame_cmdbuf;
 static SDL_GPUGraphicsPipeline *pipe_ui;
 static SDL_GPUGraphicsPipeline *pipe_ui_alphatest;
 static SDL_GPUGraphicsPipeline *pipe_post;
+static SDL_GPUGraphicsPipeline *pipe_crt_bloom;
+static SDL_GPUGraphicsPipeline *pipe_crt_phosphor;
 static SDL_GPUGraphicsPipeline *pipe_scene[SCENE_PIPE_COUNT];
 
 static SDL_GPUBuffer *scene_ibuf;
@@ -77,6 +80,10 @@ static unsigned int readback_size;
 static float post_gamma = 1.0f;
 static float post_contrast = 1.0f;
 static float post_blend[4];
+static float crt_comp_gamma = 1.0f;
+
+cvar_t r_crt_phosphor = {"r_crt_phosphor", "0"};
+cvar_t r_crt_dotbloom = {"r_crt_dotbloom", "0"};
 
 #define SHADER_ARGS(n) n##_spv, sizeof(n##_spv), n##_dxil, sizeof(n##_dxil), n##_msl, sizeof(n##_msl)
 
@@ -176,7 +183,7 @@ static SDL_GPUGraphicsPipeline *make_ui_pipeline(SDL_GPUShader *vs, SDL_GPUShade
 	return SDL_CreateGPUGraphicsPipeline(gpu_device, &ci);
 }
 
-static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs)
+static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUShader *fs, SDL_GPUTextureFormat format)
 {
 	SDL_GPUGraphicsPipelineCreateInfo ci;
 	SDL_GPUColorTargetDescription ct;
@@ -184,7 +191,7 @@ static SDL_GPUGraphicsPipeline *make_post_pipeline(SDL_GPUShader *vs, SDL_GPUSha
 	memset(&ci, 0, sizeof(ci));
 	memset(&ct, 0, sizeof(ct));
 
-	ct.format = swapchain_format;
+	ct.format = format;
 
 	ci.vertex_shader = vs;
 	ci.fragment_shader = fs;
@@ -327,6 +334,7 @@ static int create_pipelines(void)
 	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
 	SDL_GPUShader *world_vs, *world_fs, *world_at_fs, *scene_fs, *scene_at_fs;
 	SDL_GPUShader *sky_vs, *sky_fs, *water_fs, *alias_fb_fs, *mod_fs;
+	SDL_GPUShader *crt_bloom_fs, *crt_phosphor_fs;
 	int i, ok;
 
 	ui_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(ui_vert), 0, 1);
@@ -344,10 +352,13 @@ static int create_pipelines(void)
 	water_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(water_frag), 1, 1);
 	alias_fb_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(alias_fb_frag), 2, 0);
 	mod_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(mod_frag), 1, 0);
+	crt_bloom_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(crt_bloom_frag), 1, 1);
+	crt_phosphor_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(crt_phosphor_frag), 1, 1);
 
 	if (!ui_vs || !ui_fs || !ui_at_fs || !post_vs || !post_fs
 		|| !world_vs || !world_fs || !world_at_fs || !scene_fs || !scene_at_fs
-		|| !sky_vs || !sky_fs || !water_fs || !alias_fb_fs || !mod_fs)
+		|| !sky_vs || !sky_fs || !water_fs || !alias_fb_fs || !mod_fs
+		|| !crt_bloom_fs || !crt_phosphor_fs)
 	{
 		Com_Printf("GPU: shader creation failed: %s\n", SDL_GetError());
 		return 0;
@@ -355,7 +366,9 @@ static int create_pipelines(void)
 
 	pipe_ui = make_ui_pipeline(ui_vs, ui_fs);
 	pipe_ui_alphatest = make_ui_pipeline(ui_vs, ui_at_fs);
-	pipe_post = make_post_pipeline(post_vs, post_fs);
+	pipe_post = make_post_pipeline(post_vs, post_fs, swapchain_format);
+	pipe_crt_bloom = make_post_pipeline(post_vs, crt_bloom_fs, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+	pipe_crt_phosphor = make_post_pipeline(post_vs, crt_phosphor_fs, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
 	pipe_scene[SCENE_PIPE_WORLD] = make_scene_pipeline(world_vs, world_fs, 0, 1, 1);
 	pipe_scene[SCENE_PIPE_WORLD_ALPHATEST] = make_scene_pipeline(world_vs, world_at_fs, 0, 1, 1);
@@ -388,8 +401,10 @@ static int create_pipelines(void)
 	SDL_ReleaseGPUShader(gpu_device, water_fs);
 	SDL_ReleaseGPUShader(gpu_device, alias_fb_fs);
 	SDL_ReleaseGPUShader(gpu_device, mod_fs);
+	SDL_ReleaseGPUShader(gpu_device, crt_bloom_fs);
+	SDL_ReleaseGPUShader(gpu_device, crt_phosphor_fs);
 
-	ok = pipe_ui && pipe_ui_alphatest && pipe_post;
+	ok = pipe_ui && pipe_ui_alphatest && pipe_post && pipe_crt_bloom && pipe_crt_phosphor;
 	if (!ok)
 		Com_Printf("GPU: ui/post pipeline creation failed\n");
 	for (i = 0; i < SCENE_PIPE_COUNT; i++)
@@ -412,6 +427,8 @@ static int create_pipelines(void)
 
 static void destroy_scene_targets(void)
 {
+	int i;
+
 	if (scene_color)
 	{
 		SDL_ReleaseGPUTexture(gpu_device, scene_color);
@@ -421,6 +438,14 @@ static void destroy_scene_targets(void)
 	{
 		SDL_ReleaseGPUTexture(gpu_device, scene_depth);
 		scene_depth = NULL;
+	}
+	for (i = 0; i < 2; i++)
+	{
+		if (crt_tex[i])
+		{
+			SDL_ReleaseGPUTexture(gpu_device, crt_tex[i]);
+			crt_tex[i] = NULL;
+		}
 	}
 	scene_width = 0;
 	scene_height = 0;
@@ -490,7 +515,7 @@ static int rebuild_post_pipeline(void)
 
 	post_vs = load_shader(SDL_GPU_SHADERSTAGE_VERTEX, SHADER_ARGS(post_vert), 0, 0);
 	post_fs = load_shader(SDL_GPU_SHADERSTAGE_FRAGMENT, SHADER_ARGS(post_frag), 1, 1);
-	pipe_post = (post_vs && post_fs) ? make_post_pipeline(post_vs, post_fs) : NULL;
+	pipe_post = (post_vs && post_fs) ? make_post_pipeline(post_vs, post_fs, swapchain_format) : NULL;
 	if (post_vs)
 		SDL_ReleaseGPUShader(gpu_device, post_vs);
 	if (post_fs)
@@ -655,7 +680,11 @@ void GPU_ShutdownAll(void)
 		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_ui_alphatest);
 	if (pipe_post)
 		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_post);
-	pipe_ui = pipe_ui_alphatest = pipe_post = NULL;
+	if (pipe_crt_bloom)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_crt_bloom);
+	if (pipe_crt_phosphor)
+		SDL_ReleaseGPUGraphicsPipeline(gpu_device, pipe_crt_phosphor);
+	pipe_ui = pipe_ui_alphatest = pipe_post = pipe_crt_bloom = pipe_crt_phosphor = NULL;
 
 	{
 		int i;
@@ -1175,7 +1204,7 @@ static void record_scene_pass(void)
 	SDL_EndGPURenderPass(pass);
 }
 
-static void record_post_pass(SDL_GPUTexture *swap_tex, Uint32 swap_w, Uint32 swap_h)
+static void record_post_pass(SDL_GPUTexture *swap_tex, Uint32 swap_w, Uint32 swap_h, SDL_GPUTexture *src)
 {
 	SDL_GPUColorTargetInfo ct;
 	SDL_GPURenderPass *pass;
@@ -1203,13 +1232,13 @@ static void record_post_pass(SDL_GPUTexture *swap_tex, Uint32 swap_w, Uint32 swa
 	SDL_BindGPUGraphicsPipeline(pass, pipe_post);
 
 	memcpy(ubo.blend, post_blend, sizeof(ubo.blend));
-	ubo.gamma = post_gamma;
+	ubo.gamma = post_gamma * crt_comp_gamma;
 	ubo.contrast = post_contrast;
 	ubo.pad[0] = ubo.pad[1] = 0.0f;
 	SDL_PushGPUFragmentUniformData(frame_cmdbuf, 0, &ubo, sizeof(ubo));
 
 	memset(&tsb, 0, sizeof(tsb));
-	tsb.texture = scene_color;
+	tsb.texture = src;
 	tsb.sampler = samp_nearest_clamp;
 	SDL_BindGPUFragmentSamplers(pass, 0, &tsb, 1);
 
@@ -1218,9 +1247,113 @@ static void record_post_pass(SDL_GPUTexture *swap_tex, Uint32 swap_w, Uint32 swa
 	SDL_EndGPURenderPass(pass);
 }
 
+static int ensure_crt_targets(void)
+{
+	SDL_GPUTextureCreateInfo info;
+	int i;
+
+	if (crt_tex[0] && crt_tex[1])
+		return 1;
+
+	memset(&info, 0, sizeof(info));
+	info.type = SDL_GPU_TEXTURETYPE_2D;
+	info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	info.width = scene_width;
+	info.height = scene_height;
+	info.layer_count_or_depth = 1;
+	info.num_levels = 1;
+	info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+	for (i = 0; i < 2; i++)
+	{
+		if (!crt_tex[i])
+			crt_tex[i] = SDL_CreateGPUTexture(gpu_device, &info);
+		if (!crt_tex[i])
+			return 0;
+	}
+
+	return 1;
+}
+
+static void record_crt_pass(SDL_GPUCommandBuffer *cb, SDL_GPUGraphicsPipeline *pipe, SDL_GPUTexture *src, SDL_GPUTexture *dst)
+{
+	SDL_GPUColorTargetInfo ct;
+	SDL_GPURenderPass *pass;
+	SDL_GPUTextureSamplerBinding tsb;
+	struct
+	{
+		float res[2];
+		float pad[2];
+	} ubo;
+	int scale;
+
+	memset(&ct, 0, sizeof(ct));
+	ct.texture = dst;
+	ct.load_op = SDL_GPU_LOADOP_DONT_CARE;
+	ct.store_op = SDL_GPU_STOREOP_STORE;
+	ct.cycle = true;
+
+	pass = SDL_BeginGPURenderPass(cb, &ct, 1, NULL);
+	if (!pass)
+		return;
+
+	// mask density tracks ~480 logical pixels across, not the physical resolution;
+	// scale 1 would alias the mask away, so small windows get a coarser grid instead
+	scale = (int)(scene_width / 480.0f + 0.5f);
+	if (scale < 2)
+		scale = 2;
+	ubo.res[0] = (float)scene_width / scale;
+	ubo.res[1] = (float)scene_height / scale;
+	ubo.pad[0] = ubo.pad[1] = 0.0f;
+
+	SDL_BindGPUGraphicsPipeline(pass, pipe);
+	SDL_PushGPUFragmentUniformData(cb, 0, &ubo, sizeof(ubo));
+
+	memset(&tsb, 0, sizeof(tsb));
+	tsb.texture = src;
+	tsb.sampler = samp_linear_clamp;
+	SDL_BindGPUFragmentSamplers(pass, 0, &tsb, 1);
+
+	SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+
+	SDL_EndGPURenderPass(pass);
+}
+
+static SDL_GPUTexture *record_crt_chain(SDL_GPUCommandBuffer *cb)
+{
+	SDL_GPUTexture *src = scene_color;
+
+	crt_comp_gamma = 1.0f;
+	if (!(r_crt_dotbloom.value || r_crt_phosphor.value) || !ensure_crt_targets())
+		return src;
+
+	if (r_crt_dotbloom.value)
+	{
+		record_crt_pass(cb, pipe_crt_bloom, src, crt_tex[0]);
+		src = crt_tex[0];
+	}
+	if (r_crt_phosphor.value)
+	{
+		SDL_GPUTexture *dst = (src == crt_tex[0]) ? crt_tex[1] : crt_tex[0];
+		record_crt_pass(cb, pipe_crt_phosphor, src, dst);
+		src = dst;
+	}
+
+	// gamma lift compensating perceived brightness lost to the masks
+	crt_comp_gamma = (r_crt_dotbloom.value && r_crt_phosphor.value) ? 0.82f : 0.94f;
+	return src;
+}
+
+float GPU_CrtCompGamma(void)
+{
+	return crt_comp_gamma;
+}
+
 void GPU_EndFrame(void)
 {
 	SDL_GPUTexture *swap_tex;
+	SDL_GPUTexture *post_src;
 	Uint32 swap_w, swap_h;
 
 	if (!gpu_device || !frame_cmdbuf)
@@ -1228,11 +1361,13 @@ void GPU_EndFrame(void)
 
 	record_scene_pass();
 
+	post_src = record_crt_chain(frame_cmdbuf);
+
 	if (!SDL_WaitAndAcquireGPUSwapchainTexture(frame_cmdbuf, gpu_window, &swap_tex, &swap_w, &swap_h))
 		swap_tex = NULL;
 
 	if (swap_tex)
-		record_post_pass(swap_tex, swap_w, swap_h);
+		record_post_pass(swap_tex, swap_w, swap_h, post_src);
 
 	SDL_SubmitGPUCommandBuffer(frame_cmdbuf);
 	frame_cmdbuf = NULL;
@@ -1313,6 +1448,7 @@ int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height)
 	SDL_GPUTextureRegion region;
 	SDL_GPUTextureTransferInfo transfer;
 	SDL_GPUFence *fence;
+	SDL_GPUTexture *read_tex;
 	unsigned char *mapped;
 	unsigned int needed, x, y;
 
@@ -1351,10 +1487,12 @@ int GPU_ReadPixels(unsigned char *rgb, unsigned int width, unsigned int height)
 			return 0;
 	}
 
+	read_tex = record_crt_chain(cmdbuf);
+
 	copy = SDL_BeginGPUCopyPass(cmdbuf);
 
 	memset(&region, 0, sizeof(region));
-	region.texture = scene_color;
+	region.texture = read_tex;
 	region.w = width;
 	region.h = height;
 	region.d = 1;
