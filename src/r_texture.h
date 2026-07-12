@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	TEX_BRIGHTEN		64
 #define TEX_NOCOMPRESS		128
 
-#define MAX_GLTEXTURES 1024
+#define MAX_GLTEXTURES 16384
 
 
 void R_Bind (int texnum);
