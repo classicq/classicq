@@ -47,6 +47,9 @@ float GPU_CrtCompGamma(void);
 #define GPU_TEXPREF_LINEAR 1
 #define GPU_TEXPREF_CLAMP  2
 
+// bounds host memory pinned by in-flight uploads; SDL only reclaims on present
+void GPU_TrackUploadBytes(unsigned int bytes);
+
 void GPU_Texture_InitTable(void);
 void GPU_Texture_ShutdownTable(void);
 void GPU_Texture_Set(int texnum, SDL_GPUTexture *tex, unsigned int width, unsigned int height, int prefs);
