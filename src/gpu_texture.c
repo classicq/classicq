@@ -162,6 +162,7 @@ SDL_GPUTexture *GPU_CreateTextureRGBA(const unsigned char *rgba, unsigned int wi
 
 	SDL_SubmitGPUCommandBuffer(cmdbuf);
 	SDL_ReleaseGPUTransferBuffer(device, tbuf);
+	GPU_TrackUploadBytes(width * height * 4);
 
 	return tex;
 }
@@ -256,6 +257,7 @@ void GPU_UpdateTextureRGBA(int texnum, const unsigned char *rgba, unsigned int w
 	SDL_EndGPUCopyPass(copy);
 	SDL_SubmitGPUCommandBuffer(cmdbuf);
 	SDL_ReleaseGPUTransferBuffer(device, tbuf);
+	GPU_TrackUploadBytes(width * height * 4);
 }
 
 SDL_GPUTexture *GPU_Texture_Lookup(int texnum, int *prefs)

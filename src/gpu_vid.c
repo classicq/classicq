@@ -765,6 +765,18 @@ void GPU_SetPostParams(float gamma, float contrast, const float blend[4])
 		memcpy(post_blend, blend, sizeof(post_blend));
 }
 
+static unsigned int upload_inflight_bytes;
+
+void GPU_TrackUploadBytes(unsigned int bytes)
+{
+	upload_inflight_bytes += bytes;
+	if (upload_inflight_bytes >= (32u << 20) && gpu_device)
+	{
+		SDL_WaitForGPUIdle(gpu_device);
+		upload_inflight_bytes = 0;
+	}
+}
+
 static SDL_GPUSampler *sampler_for_prefs(int prefs)
 {
 	if (prefs & GPU_TEXPREF_LINEAR)
@@ -828,6 +840,7 @@ SDL_GPUBuffer *GPU_CreateStaticVertexBuffer(const scene_vert_t *verts, unsigned 
 	}
 
 	SDL_ReleaseGPUTransferBuffer(gpu_device, tbuf);
+	GPU_TrackUploadBytes(bci.size);
 	return buf;
 }
 
@@ -1371,6 +1384,10 @@ void GPU_EndFrame(void)
 
 	SDL_SubmitGPUCommandBuffer(frame_cmdbuf);
 	frame_cmdbuf = NULL;
+
+	// presenting submit triggers SDL's own deferred cleanup
+	if (swap_tex)
+		upload_inflight_bytes = 0;
 
 	// test hook: -autoshot [frame] screenshots at frame N (default 60), quits at N+10
 	{
