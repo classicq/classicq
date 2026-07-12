@@ -40,6 +40,7 @@ int GPU_GetSceneMatrices(float *modelview, float *projection, int *viewport);
 
 // post pass parameters, latched per frame by R_PostProcess_Draw
 void GPU_SetPostParams(float gamma, float contrast, const float blend[4]);
+float GPU_CrtCompGamma(void);
 
 // ---- textures (gpu_texture.c) ----
 
