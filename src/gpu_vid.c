@@ -85,6 +85,7 @@ static float crt_comp_gamma = 1.0f;
 
 cvar_t r_crt_phosphor = {"r_crt_phosphor", "0"};
 cvar_t r_crt_dotbloom = {"r_crt_dotbloom", "0"};
+cvar_t vid_framesinflight = {"vid_framesinflight", "1", CVAR_ARCHIVE};
 
 #define SHADER_ARGS(n) n##_spv, sizeof(n##_spv), n##_dxil, sizeof(n##_dxil), n##_msl, sizeof(n##_msl)
 
@@ -671,6 +672,15 @@ int GPU_Init(SDL_Window *window, int vsync)
 			Com_Printf("GPU: post pipeline rebuild failed: %s\n", SDL_GetError());
 			return 0;
 		}
+	}
+
+	{
+		int frames = (int)vid_framesinflight.value;
+		if (frames < 1)
+			frames = 1;
+		if (frames > 3)
+			frames = 3;
+		SDL_SetGPUAllowedFramesInFlight(gpu_device, frames);
 	}
 
 	GPU_Texture_InitTable();

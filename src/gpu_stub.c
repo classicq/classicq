@@ -66,6 +66,7 @@ cvar_t	gl_loadlitfiles = {"gl_loadlitfiles", "1"};
 extern cvar_t r_skyname;	// gpu_world.c, has the skybox OnChange
 extern cvar_t r_crt_phosphor;	// gpu_vid.c
 extern cvar_t r_crt_dotbloom;
+extern cvar_t vid_framesinflight;
 cvar_t	gl_water_program = {"gl_water_program", "1"};
 cvar_t	gl_part_explosions = {"gl_part_explosions", "1"};
 cvar_t	gl_part_trails = {"gl_part_trails", "0"};
@@ -96,7 +97,7 @@ static cvar_t *stub_cvars[] = {
 	&gl_part_inferno, &gl_max_size,
 	&gl_miptexLevel, &gl_scaleModelTextures, &gl_scaleTurbTextures,
 	&gl_externalTextures_world, &gl_externalTextures_bmodels,
-	&r_crt_phosphor, &r_crt_dotbloom,
+	&r_crt_phosphor, &r_crt_dotbloom, &vid_framesinflight,
 };
 
 // ---- shared globals ----
