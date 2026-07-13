@@ -287,6 +287,8 @@ void Mod_ClearAll(void)
 	}
 
 	firstmodel = 0;
+
+	WAD3_ClearTextureWads();
 }
 
 static model_t *Mod_FindName(const char *name)
@@ -990,6 +992,8 @@ static void Mod_ParseWadsFromEntityLump(char *data)
 {
 	char *s, key[1024], value[1024];
 	int i, j, k;
+
+	WAD3_ClearTextureWads();
 
 	if (!data || !(data = COM_Parse(data)))
 		return;
