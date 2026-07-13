@@ -1925,6 +1925,7 @@ void CL_CvarInit(void)
 	Cvar_Register(&r_drawflat_walls);
 
 	Cmd_AddLegacyCommand("demotimescale", "cl_demospeed");
+	Cmd_AddLegacyCommand("cl_fakeshaft", "cl_trueLightning");
 
 	CL_InitCommands();
 
