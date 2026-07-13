@@ -1489,8 +1489,10 @@ void CL_ProcessServerInfo (void)
 		cl.allow_lumas = !strcmp(Info_ValueForKey(cl.serverinfo, "24bit_fbs"), "1") ? true : false;
 		cl.fbskins = *(fbskins = Info_ValueForKey(cl.serverinfo, "fbskins")) ? bound(0, Q_atof(fbskins), 1) :
 		cl.teamfortress ? 0 : 1;
-		cl.truelightning = *(truelightning = Info_ValueForKey(cl.serverinfo, "truelightning")) ?
-			bound(0, Q_atof(truelightning), 1) : 1;
+		truelightning = Info_ValueForKey(cl.serverinfo, "fakeshaft");
+		if (!*truelightning)
+			truelightning = Info_ValueForKey(cl.serverinfo, "truelightning");
+		cl.truelightning = *truelightning ? bound(0, Q_atof(truelightning), 1) : 1;
 		fpd = atoi(Info_ValueForKey(cl.serverinfo, "fpd"));
 	}
 
