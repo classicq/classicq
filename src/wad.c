@@ -395,7 +395,7 @@ void WAD3_LoadTextureWadFile(const char *filename)
 						break;
 				}
 
-				if (j != texwadlumpcount)
+				if (j == texwadlumpcount)
 					Q_strncpyz(texwadlump[j].name, lump_p->name, sizeof(texwadlump[j].name));
 
 				texwadlump[j].file = file;
