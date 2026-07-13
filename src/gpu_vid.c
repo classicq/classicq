@@ -70,6 +70,7 @@ static SDL_GPUSampler *samp_nearest;
 static SDL_GPUSampler *samp_linear;
 static SDL_GPUSampler *samp_nearest_clamp;
 static SDL_GPUSampler *samp_linear_clamp;
+static SDL_GPUSampler *samp_tex[12];
 
 static SDL_GPUBuffer *ui_vbuf;
 static SDL_GPUTransferBuffer *ui_tbuf;
@@ -329,6 +330,30 @@ static SDL_GPUSampler *make_sampler(SDL_GPUFilter filter, SDL_GPUSamplerAddressM
 	return SDL_CreateGPUSampler(gpu_device, &ci);
 }
 
+// gl_texturemode semantics: no mipmap suffix locks sampling to the base level
+static SDL_GPUSampler *make_tex_sampler(int prefs)
+{
+	SDL_GPUSamplerCreateInfo ci;
+
+	memset(&ci, 0, sizeof(ci));
+	ci.min_filter = ci.mag_filter = (prefs & GPU_TEXPREF_LINEAR) ?
+		SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
+	ci.mipmap_mode = (prefs & GPU_TEXPREF_MIP_LINEAR) ?
+		SDL_GPU_SAMPLERMIPMAPMODE_LINEAR : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+	ci.max_lod = (prefs & (GPU_TEXPREF_MIP_NEAREST | GPU_TEXPREF_MIP_LINEAR)) ? 1000.0f : 0.0f;
+	ci.address_mode_u = ci.address_mode_v = ci.address_mode_w = (prefs & GPU_TEXPREF_CLAMP) ?
+		SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE : SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+
+	return SDL_CreateGPUSampler(gpu_device, &ci);
+}
+
+static int tex_sampler_index(int prefs)
+{
+	int mip = (prefs & GPU_TEXPREF_MIP_NEAREST) ? 1 : (prefs & GPU_TEXPREF_MIP_LINEAR) ? 2 : 0;
+
+	return ((prefs & GPU_TEXPREF_LINEAR) ? 6 : 0) + mip * 2 + ((prefs & GPU_TEXPREF_CLAMP) ? 1 : 0);
+}
+
 static int create_pipelines(void)
 {
 	SDL_GPUShader *ui_vs, *ui_fs, *ui_at_fs, *post_vs, *post_fs;
@@ -573,6 +598,24 @@ int GPU_Init(SDL_Window *window, int vsync)
 		samp_nearest_clamp = make_sampler(SDL_GPU_FILTER_NEAREST, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
 		samp_linear_clamp = make_sampler(SDL_GPU_FILTER_LINEAR, SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
 
+		{
+			int p, ok = 1;
+			for (p = 0; p < 16; p++)
+			{
+				if ((p & GPU_TEXPREF_MIP_NEAREST) && (p & GPU_TEXPREF_MIP_LINEAR))
+					continue;
+				samp_tex[tex_sampler_index(p)] = make_tex_sampler(p);
+				if (!samp_tex[tex_sampler_index(p)])
+					ok = 0;
+			}
+			if (!ok)
+			{
+				Com_Printf("GPU: sampler creation failed: %s\n", SDL_GetError());
+				GPU_ShutdownAll();
+				return 0;
+			}
+		}
+
 		memset(&bci, 0, sizeof(bci));
 		bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
 		bci.size = UI_MAX_VERTS * sizeof(ui_vert_t);
@@ -720,6 +763,16 @@ void GPU_ShutdownAll(void)
 		SDL_ReleaseGPUSampler(gpu_device, samp_linear_clamp);
 	samp_nearest = samp_linear = samp_nearest_clamp = samp_linear_clamp = NULL;
 
+	{
+		int i;
+		for (i = 0; i < 12; i++)
+		{
+			if (samp_tex[i])
+				SDL_ReleaseGPUSampler(gpu_device, samp_tex[i]);
+			samp_tex[i] = NULL;
+		}
+	}
+
 	if (ui_vbuf)
 		SDL_ReleaseGPUBuffer(gpu_device, ui_vbuf);
 	if (ui_tbuf)
@@ -779,6 +832,10 @@ void GPU_TrackUploadBytes(unsigned int bytes)
 
 static SDL_GPUSampler *sampler_for_prefs(int prefs)
 {
+	SDL_GPUSampler *s = samp_tex[tex_sampler_index(prefs)];
+
+	if (s)
+		return s;
 	if (prefs & GPU_TEXPREF_LINEAR)
 		return (prefs & GPU_TEXPREF_CLAMP) ? samp_linear_clamp : samp_linear;
 	return (prefs & GPU_TEXPREF_CLAMP) ? samp_nearest_clamp : samp_nearest;

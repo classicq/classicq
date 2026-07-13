@@ -330,15 +330,20 @@ static void scale_dimensions(int width, int height, int *scaled_width, int *scal
 	*scaled_height = max(1, h);
 }
 
-// mag filter depends only on the gl_nearest/gl_linear prefix
 int GPU_PrefsForTexturemode(void)
 {
-	int nearest;
+	const char *s = gl_texturemode.string;
+	int prefs = 0;
 
-	nearest = Q_strcasecmp(gl_texturemode.string, "gl_nearest") == 0
-		|| Q_strncasecmp(gl_texturemode.string, "gl_nearest_", 11) == 0;
+	if (Q_strcasecmp(s, "gl_nearest") != 0 && Q_strncasecmp(s, "gl_nearest_", 11) != 0)
+		prefs |= GPU_TEXPREF_LINEAR;
 
-	return nearest ? 0 : GPU_TEXPREF_LINEAR;
+	if (Q_strcasecmp(s, "gl_nearest_mipmap_nearest") == 0 || Q_strcasecmp(s, "gl_linear_mipmap_nearest") == 0)
+		prefs |= GPU_TEXPREF_MIP_NEAREST;
+	else if (Q_strcasecmp(s, "gl_nearest_mipmap_linear") == 0 || Q_strcasecmp(s, "gl_linear_mipmap_linear") == 0)
+		prefs |= GPU_TEXPREF_MIP_LINEAR;
+
+	return prefs;
 }
 
 static int prefs_for_mode(int mode)

@@ -44,8 +44,10 @@ float GPU_CrtCompGamma(void);
 
 // ---- textures (gpu_texture.c) ----
 
-#define GPU_TEXPREF_LINEAR 1
-#define GPU_TEXPREF_CLAMP  2
+#define GPU_TEXPREF_LINEAR      1
+#define GPU_TEXPREF_CLAMP       2
+#define GPU_TEXPREF_MIP_NEAREST 4
+#define GPU_TEXPREF_MIP_LINEAR  8
 
 // bounds host memory pinned by in-flight uploads; SDL only reclaims on present
 void GPU_TrackUploadBytes(unsigned int bytes);
