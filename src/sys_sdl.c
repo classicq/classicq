@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #  include <unistd.h>
 #  include <fcntl.h>
 #  include <sys/time.h>
+#  include <sys/resource.h>
 #endif
 
 #if defined(__APPLE__)
@@ -406,6 +407,21 @@ int main(int argc, char **argv)
 
 #if defined(_WIN32)
 	SetUnhandledExceptionFilter(Sys_CrashHandler);
+#else
+	{
+		struct rlimit rl;
+		rlim_t want;
+
+		if (getrlimit(RLIMIT_NOFILE, &rl) == 0)
+		{
+			want = (rl.rlim_max == RLIM_INFINITY || rl.rlim_max > 8192) ? 8192 : rl.rlim_max;
+			if (rl.rlim_cur < want)
+			{
+				rl.rlim_cur = want;
+				setrlimit(RLIMIT_NOFILE, &rl);
+			}
+		}
+	}
 #endif
 
 	SDL_SetMainReady();
