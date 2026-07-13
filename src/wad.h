@@ -69,6 +69,7 @@ void W_LoadWadFile(const char *filename);
 void W_UnloadWadFile(void);
 void *W_GetLumpName(const char *name);
 
+void WAD3_ClearTextureWads(void);
 void WAD3_LoadTextureWadFile(const char *filename);
 byte *WAD3_LoadTexture(miptex_t *mt);
 

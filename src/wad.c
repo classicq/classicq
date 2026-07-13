@@ -294,6 +294,27 @@ typedef struct
 static texwadlump_t *texwadlump;
 static unsigned int texwadlumpcount;
 
+void WAD3_ClearTextureWads(void)
+{
+	unsigned int i, j;
+
+	for (i = 0; i < texwadlumpcount; i++)
+	{
+		if (!texwadlump[i].file)
+			continue;
+		for (j = i + 1; j < texwadlumpcount; j++)
+		{
+			if (texwadlump[j].file == texwadlump[i].file)
+				texwadlump[j].file = 0;
+		}
+		fclose(texwadlump[i].file);
+	}
+
+	free(texwadlump);
+	texwadlump = 0;
+	texwadlumpcount = 0;
+}
+
 void WAD3_LoadTextureWadFile(const char *filename)
 {
 	texwadlump_t *newtexwadlump;
@@ -311,12 +332,14 @@ void WAD3_LoadTextureWadFile(const char *filename)
 	if (fread(&header, 1, sizeof(wadinfo_t), file) != sizeof(wadinfo_t))
 	{
 		Com_Printf ("WAD3_LoadTextureWadFile: unable to read wad header");
+		fclose(file);
 		return;
 	}
 
 	if (memcmp(header.identification, "WAD3", 4))
 	{
 		Com_Printf ("WAD3_LoadTextureWadFile: Wad file %s doesn't have WAD3 id\n",filename);
+		fclose(file);
 		return;
 	}
 
@@ -324,12 +347,14 @@ void WAD3_LoadTextureWadFile(const char *filename)
 	if (numlumps < 1 || numlumps > TEXWAD_MAXIMAGES)
 	{
 		Com_Printf ("WAD3_LoadTextureWadFile: invalid number of lumps (%i)\n", numlumps);
+		fclose(file);
 		return;
 	}
 
 	if (texwadlumpcount + numlumps > TEXWAD_MAXIMAGES)
 	{
 		Com_Printf("WAD3_LoadTextureWadFile: Too many lumps loaded\n");
+		fclose(file);
 		return;
 	}
 
@@ -337,12 +362,14 @@ void WAD3_LoadTextureWadFile(const char *filename)
 	if (fseek(file, infotableofs, SEEK_SET))
 	{
 		Com_Printf ("WAD3_LoadTextureWadFile: unable to seek to lump table");
+		fclose(file);
 		return;
 	}
 
 	if (!(lumps = malloc(sizeof(lumpinfo_t) * numlumps)))
 	{
 		Com_Printf ("WAD3_LoadTextureWadFile: unable to allocate temporary memory for lump table");
+		fclose(file);
 	}
 	else
 	{
@@ -355,6 +382,7 @@ void WAD3_LoadTextureWadFile(const char *filename)
 		if (fread(lumps, 1, sizeof(lumpinfo_t) * numlumps, file) != sizeof(lumpinfo_t) * numlumps)
 		{
 			Com_Printf ("WAD3_LoadTextureWadFile: unable to read lump table");
+			fclose(file);
 		}
 		else
 		{
