@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "sound.h"
 
+static cvar_t s_desiredsamples = {"s_desiredsamples", "0", CVAR_ARCHIVE};
+
 static SDL_AudioStream *g_stream;
 
 static void sdl_audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
@@ -67,6 +69,15 @@ static qboolean sdl_audio_init(struct SoundCard *sc, int rate, int channels, int
 		Com_Printf("SDL audio: only 16-bit samples supported (got %d)\n", bits);
 		return false;
 	}
+
+	if (s_desiredsamples.value > 0)
+	{
+		char tmp[16];
+		snprintf(tmp, sizeof(tmp), "%d", (int)s_desiredsamples.value);
+		SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, tmp);
+	}
+	else
+		SDL_ResetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES);
 
 	if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
 	{
@@ -113,6 +124,9 @@ static qboolean sdl_audio_init(struct SoundCard *sc, int rate, int channels, int
 
 static void sdl_audio_cvarinit(void)
 {
+	Cvar_SetCurrentGroup(CVAR_GROUP_SOUND);
+	Cvar_Register(&s_desiredsamples);
+	Cvar_ResetCurrentGroup();
 }
 
 SoundInitFunc SNDSDL_Init = sdl_audio_init;
