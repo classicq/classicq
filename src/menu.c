@@ -3952,7 +3952,6 @@ void M_Draw()
 		if (SCR_NEED_CONSOLE_BACKGROUND)
 		{
 			Draw_ConsoleBackground (scr_con_current);
-			S_ExtraUpdate ();
 		}
 		else
 		{
@@ -4085,8 +4084,6 @@ void M_Draw()
 		S_LocalSound ("misc/menu2.wav");
 		m_entersound = false;
 	}
-
-	S_ExtraUpdate ();
 }
 
 void M_Keydown(int key)

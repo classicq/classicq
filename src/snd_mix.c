@@ -26,13 +26,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 extern struct SoundCard *soundcard;
 
-#define DWORD	unsigned long
-
 #define	PAINTBUFFER_SIZE	512
 portable_samplepair_t paintbuffer[PAINTBUFFER_SIZE];
 int		snd_scaletable[32][256];
 int 	*snd_p, snd_linear_count, snd_vol;
 short	*snd_out;
+int		snd_mixbase;
 
 void Snd_WriteLinearBlastStereo16 (void);
 
@@ -68,65 +67,26 @@ void Snd_WriteLinearBlastStereo16_SwapStereo (void)
 
 void S_TransferStereo16 (int endtime)
 {
-	int		lpos;
-	int		lpaintedtime;
-	DWORD	*pbuf;
-
 	snd_vol = s_volume.value*256;
 
 	snd_p = (int *) paintbuffer;
-	lpaintedtime = paintedtime;
+	snd_out = (short *)soundcard->buffer + ((paintedtime - snd_mixbase)<<1);
+	snd_linear_count = (endtime - paintedtime)<<1;
 
-	if (soundcard->Lock)
-		pbuf = soundcard->Lock(soundcard);
+	if (s_swapstereo.value)
+		Snd_WriteLinearBlastStereo16_SwapStereo ();
 	else
-	{
-		pbuf = (DWORD *)soundcard->buffer;
-	}
-	if (!pbuf)
-	{
-		Com_Printf("Couldn't lock sound buffer\n");
-		lpaintedtime = endtime;
-		return;
-	}
-
-	while (lpaintedtime < endtime)
-	{
-	// handle recirculating buffer issues
-		lpos = lpaintedtime % ((soundcard->samples>>1));
-
-		snd_out = (short *) pbuf + (lpos<<1);
-
-		snd_linear_count = (soundcard->samples>>1) - lpos;
-		if (lpaintedtime + snd_linear_count > endtime)
-			snd_linear_count = endtime - lpaintedtime;
-
-		snd_linear_count <<= 1;
-
-	// write a linear blast of samples
-		if (s_swapstereo.value)
-			Snd_WriteLinearBlastStereo16_SwapStereo ();
-		else
-			Snd_WriteLinearBlastStereo16 ();
-
-		snd_p += snd_linear_count;
-		lpaintedtime += (snd_linear_count>>1);
-	}
-
-	if (soundcard->Unlock)
-		soundcard->Unlock(soundcard);
+		Snd_WriteLinearBlastStereo16 ();
 }
 
 void S_TransferPaintBuffer(int endtime)
 {
 	int 	out_idx;
 	int 	count;
-	int 	out_mask;
 	int 	*p;
 	int 	step;
 	int		val;
 	int		snd_vol;
-	DWORD	*pbuf;
 
 	if (soundcard->samplebits == 16 && soundcard->channels == 2)
 	{
@@ -136,21 +96,13 @@ void S_TransferPaintBuffer(int endtime)
 
 	p = (int *) paintbuffer;
 	count = (endtime - paintedtime) * soundcard->channels;
-	out_mask = soundcard->samples - 1;
-	out_idx = paintedtime * soundcard->channels & out_mask;
+	out_idx = (paintedtime - snd_mixbase) * soundcard->channels;
 	step = 3 - soundcard->channels;
 	snd_vol = s_volume.value*256;
 
-	if (soundcard->Lock)
-		pbuf = soundcard->Lock(soundcard);
-	else
-	{
-		pbuf = (DWORD *)soundcard->buffer;
-	}
-
 	if (soundcard->samplebits == 16)
 	{
-		short *out = (short *) pbuf;
+		short *out = (short *) soundcard->buffer;
 		while (count--)
 		{
 			val = (*p * snd_vol) >> 8;
@@ -159,13 +111,12 @@ void S_TransferPaintBuffer(int endtime)
 				val = 0x7fff;
 			else if (val < (short)0x8000)
 				val = (short)0x8000;
-			out[out_idx] = val;
-			out_idx = (out_idx + 1) & out_mask;
+			out[out_idx++] = val;
 		}
 	}
 	else if (soundcard->samplebits == 8)
 	{
-		unsigned char *out = (unsigned char *) pbuf;
+		unsigned char *out = (unsigned char *) soundcard->buffer;
 		while (count--)
 		{
 			val = (*p * snd_vol) >> 8;
@@ -174,13 +125,9 @@ void S_TransferPaintBuffer(int endtime)
 				val = 0x7fff;
 			else if (val < (short)0x8000)
 				val = (short)0x8000;
-			out[out_idx] = (val>>8) + 128;
-			out_idx = (out_idx + 1) & out_mask;
+			out[out_idx++] = (val>>8) + 128;
 		}
 	}
-
-	if (soundcard->Unlock)
-		soundcard->Unlock(soundcard);
 }
 
 
@@ -221,9 +168,13 @@ void S_PaintChannels(int endtime)
 				continue;
 			if (!ch->leftvol && !ch->rightvol)
 				continue;
-			sc = S_LoadSound (ch->sfx);
+			// no loading from the audio thread, skip channels without a cache
+			sc = ch->sfx->sfxcache;
 			if (!sc)
+			{
+				ch->sfx = NULL;
 				continue;
+			}
 
 			ltime = paintedtime;
 

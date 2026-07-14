@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <string.h>
 
+#include <SDL3/SDL.h>
+
 #include "quakedef.h"
 #include "sound.h"
 
@@ -31,7 +33,6 @@ struct SoundCard *soundcard;
 static void S_Play_f(void);
 static void S_PlayVol_f(void);
 static void S_SoundList_f(void);
-static void S_Update_();
 static void S_StopAllSounds_f(void);
 
 // =======================================================================
@@ -52,7 +53,6 @@ static vec3_t	listener_right;
 static vec3_t	listener_up;
 static vec_t	sound_nominal_clip_dist = 1000.0;
 
-static int	soundtime;		// sample PAIRS
 int   		paintedtime; 	// sample PAIRS
 
 #define	MAX_SFX	512
@@ -61,9 +61,19 @@ static int		num_sfx;
 
 static sfx_t	*ambient_sfx[NUM_AMBIENTS];
 
-static int soundtime_bufferwraps, soundtime_oldsamplepos;
-
 static int sound_started = 0;
+
+static SDL_Mutex *snd_mutex;
+
+void S_LockMixer(void)
+{
+	SDL_LockMutex(snd_mutex);
+}
+
+void S_UnlockMixer(void)
+{
+	SDL_UnlockMutex(snd_mutex);
+}
 
 cvar_t bgmvolume = {"bgmvolume", "1", CVAR_ARCHIVE};
 cvar_t s_volume = {"volume", "0.2", CVAR_ARCHIVE};
@@ -73,9 +83,7 @@ cvar_t s_loadas8bit = {"s_loadas8bit", "0"};
 cvar_t s_khz = {"s_khz", "11"};
 cvar_t s_ambientlevel = {"s_ambientlevel", "1"};
 cvar_t s_ambientfade = {"s_ambientfade", "100"};
-cvar_t s_noextraupdate = {"s_noextraupdate", "0"};
 cvar_t s_show = {"s_show", "0"};
-cvar_t s_mixahead = {"s_mixahead", "0.1", CVAR_ARCHIVE};
 cvar_t s_swapstereo = {"s_swapstereo", "0"};
 cvar_t s_driver = {"s_driver", "auto"};
 
@@ -109,11 +117,8 @@ void S_SoundInfo_f (void)
 	}
 	Com_Printf ("%s driver\n", soundcard->drivername);
 	Com_Printf ("%5d stereo\n", soundcard->channels - 1);
-	Com_Printf ("%5d samples\n", soundcard->samples);
-	Com_Printf ("%5d samplepos\n", soundcard->samplepos);
 	Com_Printf ("%5d samplebits\n", soundcard->samplebits);
 	Com_Printf ("%5d speed\n", soundcard->speed);
-	Com_Printf ("0x%p dma buffer\n", soundcard->buffer);
 	Com_Printf ("%5d total_channels\n", total_channels);
 }
 
@@ -125,6 +130,12 @@ static void S_InitDriver()
 
 	if (!snd_initialized)
 		return;
+
+	if (!snd_mutex)
+		snd_mutex = SDL_CreateMutex();
+
+	// before the stream goes live, the callback mixes only while sound_started is set under the lock
+	paintedtime = 0;
 
 	if (s_khz.value == 44)
 		rate = 44100;
@@ -172,11 +183,9 @@ static void S_InitDriver()
 		return;
 	}
 
-	soundtime_bufferwraps = 0;
-	soundtime_oldsamplepos = 0;
-	paintedtime = 0;
-
+	S_LockMixer();
 	sound_started = 1;
+	S_UnlockMixer();
 }
 
 static void S_ShutdownDriver()
@@ -184,7 +193,9 @@ static void S_ShutdownDriver()
 	if (!sound_started)
 		return;
 
+	S_LockMixer();
 	sound_started = 0;
+	S_UnlockMixer();
 
 	soundcard->Shutdown(soundcard);
 
@@ -196,8 +207,8 @@ void SND_Restart_f (void)
 {
 	int i;
 
+	S_StopAllSounds(true);
 	S_ShutdownDriver();
-	sound_started = 0;
 
 	for(i=0;i<num_sfx;i++)
 	{
@@ -231,9 +242,7 @@ void S_CvarInit(void)
 	Cvar_Register(&s_khz);
 	Cvar_Register(&s_ambientlevel);
 	Cvar_Register(&s_ambientfade);
-	Cvar_Register(&s_noextraupdate);
 	Cvar_Register(&s_show);
-	Cvar_Register(&s_mixahead);
 	Cvar_Register(&s_swapstereo);
 	Cvar_Register(&s_driver);
 
@@ -246,9 +255,7 @@ void S_CvarInit(void)
 	Cmd_AddLegacyCommand ("loadas8bit", "s_loadas8bit");
 	Cmd_AddLegacyCommand ("ambient_level", "s_ambientlevel");
 	Cmd_AddLegacyCommand ("ambient_fade", "s_ambientfade");
-	Cmd_AddLegacyCommand ("snd_noextraupdate", "s_noextraupdate");
 	Cmd_AddLegacyCommand ("snd_show", "s_show");
-	Cmd_AddLegacyCommand ("_snd_mixahead", "s_mixahead");
 
 	Cmd_AddCommand("snd_restart", SND_Restart_f);
 	Cmd_AddCommand("play", S_Play_f);
@@ -448,10 +455,15 @@ void S_StartSound(int entnum, int entchannel, sfx_t *sfx, const vec3_t origin, f
 
 	vol = fvol * 255;
 
+	S_LockMixer();
+
 	// pick a channel to play on
 	target_chan = SND_PickChannel(entnum, entchannel);
 	if (!target_chan)
+	{
+		S_UnlockMixer();
 		return;
+	}
 
 	// spatialize
 	memset (target_chan, 0, sizeof(*target_chan));
@@ -463,13 +475,17 @@ void S_StartSound(int entnum, int entchannel, sfx_t *sfx, const vec3_t origin, f
 	SND_Spatialize(target_chan);
 
 	if (!target_chan->leftvol && !target_chan->rightvol)
+	{
+		S_UnlockMixer();
 		return;		// not audible at all
+	}
 
 	// new channel
 	sc = S_LoadSound (sfx);
 	if (!sc)
 	{
 		target_chan->sfx = NULL;
+		S_UnlockMixer();
 		return;		// couldn't load the sound's data
 	}
 
@@ -494,11 +510,15 @@ void S_StartSound(int entnum, int entchannel, sfx_t *sfx, const vec3_t origin, f
 			break;
 		}
 	}
+
+	S_UnlockMixer();
 }
 
 void S_StopSound (int entnum, int entchannel)
 {
 	int i;
+
+	S_LockMixer();
 
 	for (i = 0; i < MAX_DYNAMIC_CHANNELS; i++)
 	{
@@ -506,56 +526,27 @@ void S_StopSound (int entnum, int entchannel)
 		{
 			channels[i].end = 0;
 			channels[i].sfx = NULL;
-			return;
+			break;
 		}
 	}
+
+	S_UnlockMixer();
 }
 
 void S_StopAllSounds (qboolean clear)
 {
-	int i;
+	S_LockMixer();
 
 	total_channels = MAX_DYNAMIC_CHANNELS + NUM_AMBIENTS;	// no statics
 
-	for (i = 0; i < MAX_CHANNELS; i++)
-	{
-		if (channels[i].sfx)
-			channels[i].sfx = NULL;
-	}
-
 	memset(channels, 0, MAX_CHANNELS * sizeof(channel_t));
 
-	if (!sound_started)
-		return;
-
-	if (clear)
-		S_ClearBuffer ();
+	S_UnlockMixer();
 }
 
 static void S_StopAllSounds_f(void)
 {
 	S_StopAllSounds (true);
-}
-
-void S_ClearBuffer (void)
-{
-	unsigned char *buffer;
-	int clear;
-
-	if (!sound_started || !soundcard || !soundcard->buffer)
-		return;
-
-	clear = (soundcard->samplebits == 8) ? 0x80 : 0;
-
-	if (soundcard->Lock)
-		buffer = soundcard->Lock(soundcard);
-	else
-		buffer = soundcard->buffer;
-
-	memset(buffer, clear, soundcard->samples * soundcard->samplebits/8);
-
-	if (soundcard->Unlock)
-		soundcard->Unlock(soundcard);
 }
 
 void S_StaticSound (sfx_t *sfx, vec3_t origin, float vol, float attenuation)
@@ -566,9 +557,12 @@ void S_StaticSound (sfx_t *sfx, vec3_t origin, float vol, float attenuation)
 	if (!sfx)
 		return;
 
+	S_LockMixer();
+
 	if (total_channels == MAX_CHANNELS)
 	{
 		Com_Printf ("total_channels == MAX_CHANNELS\n");
+		S_UnlockMixer();
 		return;
 	}
 
@@ -577,11 +571,15 @@ void S_StaticSound (sfx_t *sfx, vec3_t origin, float vol, float attenuation)
 
 	sc = S_LoadSound (sfx);
 	if (!sc)
+	{
+		S_UnlockMixer();
 		return;
+	}
 
 	if (sc->loopstart == -1)
 	{
 		Com_Printf ("Sound %s not looped\n", sfx->name);
+		S_UnlockMixer();
 		return;
 	}
 
@@ -592,6 +590,8 @@ void S_StaticSound (sfx_t *sfx, vec3_t origin, float vol, float attenuation)
 	ss->end = paintedtime + sc->length;
 
 	SND_Spatialize (ss);
+
+	S_UnlockMixer();
 }
 
 //=============================================================================
@@ -653,6 +653,8 @@ void S_Update(const vec3_t origin, const vec3_t forward, const vec3_t right, con
 
 	if (!sound_started || (snd_blocked > 0))
 		return;
+
+	S_LockMixer();
 
 	VectorCopy(origin, listener_origin);
 	VectorCopy(forward, listener_forward);
@@ -725,84 +727,34 @@ void S_Update(const vec3_t origin, const vec3_t forward, const vec3_t right, con
 		Com_Printf ("----(%i)----\n", total);
 	}
 
-	// mix some sound
-	S_Update_();
+	S_UnlockMixer();
 }
 
-void GetSoundtime (void)
+// called by the driver from the audio thread
+void S_MixAudio(void *buf, int frames)
 {
-	int samplepos, fullsamples;
-
-	fullsamples = soundcard->samples / soundcard->channels;
-
-	// it is possible to miscount buffers if it has wrapped twice between calls to S_Update.  Oh well.
-	samplepos = soundcard->GetDMAPos(soundcard);
-
-	if (samplepos < soundtime_oldsamplepos)
-	{
-		soundtime_bufferwraps++;					// buffer wrapped
-
-		if (paintedtime > 0x40000000)
-		{
-			// time to chop things off to avoid 32 bit limits
-			soundtime_bufferwraps = 0;
-			paintedtime = fullsamples;
-			S_StopAllSounds (true);
-		}
-	}
-
-	soundtime_oldsamplepos = samplepos;
-
-	soundtime = soundtime_bufferwraps * fullsamples + samplepos/soundcard->channels;
-}
-
-void S_ExtraUpdate(void)
-{
-	if (s_noextraupdate.value)
-		return;		// don't pollute timings
-	S_Update_();
-}
-
-static void S_Update_(void)
-{
-	unsigned endtime;
-	int samps;
-	int avail;
+	S_LockMixer();
 
 	if (!sound_started || (snd_blocked > 0))
+	{
+		memset(buf, 0, frames * soundcard->channels * (soundcard->samplebits / 8));
+		S_UnlockMixer();
 		return;
-
-	// Updates DMA time
-	GetSoundtime();
-
-	// check to make sure that we haven't overshot
-	if (paintedtime < soundtime)
-	{
-		//Com_Printf ("S_Update_ : overflow\n");
-		paintedtime = soundtime;
 	}
 
-	// mix ahead of current position
-	if (soundcard->GetAvail)
+	if (paintedtime > 0x40000000)
 	{
-		avail = soundcard->GetAvail(soundcard);
-		if (avail <= 0)
-			return;
-
-		endtime = soundtime + avail;
+		// time to chop things off to avoid 32 bit limits
+		total_channels = MAX_DYNAMIC_CHANNELS + NUM_AMBIENTS;
+		memset(channels, 0, MAX_CHANNELS * sizeof(channel_t));
+		paintedtime = 0;
 	}
-	else
-		endtime = soundtime + (int)(s_mixahead.value * soundcard->speed);
-	samps = soundcard->samples >> (soundcard->channels - 1);
-	if (endtime - soundtime > samps)
-		endtime = soundtime + samps;
 
-	if (soundcard->Restore)
-		soundcard->Restore(soundcard);
+	soundcard->buffer = buf;
+	snd_mixbase = paintedtime;
+	S_PaintChannels(paintedtime + frames);
 
-	S_PaintChannels(endtime);
-
-	soundcard->Submit(soundcard, paintedtime - soundtime);
+	S_UnlockMixer();
 }
 
 /*

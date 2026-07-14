@@ -35,18 +35,13 @@ extern struct SoundCard *soundcard;
 ResampleSfx
 ================
 */
-void ResampleSfx (sfx_t *sfx, int inrate, int inwidth, byte *data)
+static void ResampleSfx (sfxcache_t *sc, int inrate, int inwidth, byte *data)
 {
 	int		outcount;
 	int		srcsample;
 	float	stepscale;
 	int		i;
 	int		sample, samplefrac, fracstep;
-	sfxcache_t	*sc;
-
-	sc = sfx->sfxcache;
-	if (!sc)
-		return;
 
 	stepscale = (float)inrate / soundcard->speed;	// this is usually 0.5, 1, or 2
 
@@ -151,9 +146,12 @@ sfxcache_t *S_LoadSound(sfx_t *s)
 				sc->width = info.width;
 				sc->stereo = info.channels;
 
-				s->sfxcache = sc;
+				ResampleSfx (sc, sc->speed, sc->width, data + info.dataofs);
 
-				ResampleSfx (s, sc->speed, sc->width, data + info.dataofs);
+				// publish only when fully initialized, the mixer reads this from the audio thread
+				S_LockMixer();
+				s->sfxcache = sc;
+				S_UnlockMixer();
 			}
 		}
 

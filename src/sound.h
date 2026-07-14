@@ -75,21 +75,12 @@ typedef struct
 struct SoundCard
 {
 	void *driverprivate;
-	int (*GetDMAPos)(struct SoundCard *);
-	int (*GetAvail)(struct SoundCard *);
-	void (*Submit)(struct SoundCard *, unsigned int count);
 	void (*Shutdown)(struct SoundCard *);
 
-	void *(*Lock)(struct SoundCard *);
-	void (*Unlock)(struct SoundCard *);
-	void (*Restore)(struct SoundCard *);
-
 	int channels;
-	int samples;             // mono samples in buffer
-	int samplepos;           // in mono samples
 	int samplebits;
 	int speed;
-	void *buffer;
+	void *buffer;            // current mix destination, set by S_MixAudio
 
 	char *drivername;
 };
@@ -105,9 +96,10 @@ void S_StartSound(int entnum, int entchannel, sfx_t *sfx, const vec3_t origin, f
 void S_StaticSound (sfx_t *sfx, vec3_t origin, float vol, float attenuation);
 void S_StopSound (int entnum, int entchannel);
 void S_StopAllSounds(qboolean clear);
-void S_ClearBuffer (void);
 void S_Update(const vec3_t origin, const vec3_t v_forward, const vec3_t v_right, const vec3_t v_up);
-void S_ExtraUpdate (void);
+void S_MixAudio(void *buf, int frames);
+void S_LockMixer(void);
+void S_UnlockMixer(void);
 
 sfx_t *S_PrecacheSound (char *sample);
 void S_TouchSound (char *sample);
@@ -139,6 +131,7 @@ extern	channel_t   channels[MAX_CHANNELS];
 extern	int			total_channels;
 
 extern int		paintedtime;
+extern int		snd_mixbase;
 
 extern cvar_t	s_loadas8bit;
 extern cvar_t	s_khz;
