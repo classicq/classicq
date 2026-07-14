@@ -244,10 +244,10 @@ static void DumpVariables(FILE	*f)
 static void DumpAliases(FILE *f)
 {
 	int maxlen, i, j, count, lonely_count, minus_index, minus_count;
-	cmd_alias_t	*b, *a, *sorted_aliases[512], *lonely_pluses[512];
+	cmd_alias_t	*b, *a, *sorted_aliases[2048], *lonely_pluses[2048];
 	qboolean partner, printed;
 
-	for (count = maxlen = 0, a = cmd_alias;	count < sizeof(sorted_aliases) && a; a = a->next)
+	for (count = maxlen = 0, a = cmd_alias;	count < (sizeof(sorted_aliases) / sizeof(*sorted_aliases)) && a; a = a->next)
 	{
 		if (!(a->flags & (ALIAS_SERVER|ALIAS_TEMP)))
 		{
