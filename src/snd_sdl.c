@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "sound.h"
 
-static cvar_t s_desiredsamples = {"s_desiredsamples", "0", CVAR_ARCHIVE};
+static cvar_t s_desiredsamples = {"s_desiredsamples", "512", CVAR_ARCHIVE};
 
 static SDL_AudioStream *g_stream;
 
