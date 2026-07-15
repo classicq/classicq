@@ -11,7 +11,7 @@
 #endif
 
 #define	QW_VERSION              2.40
-#define CLASSICQ_VERSION        "3.4.0" COMPILERVERSIONSTRINGAPPEND
+#define CLASSICQ_VERSION        "3.5.0" COMPILERVERSIONSTRINGAPPEND
 
 #if defined(_WIN32) || defined(_WIN64)
 #define QW_PLATFORM     "Windows"
@@ -47,8 +47,6 @@
 #else
 #define QW_ARCH "unknown"
 #endif
-
-#define QW_RENDERER "GL"
 
 void CL_Version_f (void);
 char *VersionString (void);
