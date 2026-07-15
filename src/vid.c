@@ -272,6 +272,7 @@ void VID_Restart(void)
 		cl.worldmodel = cl.model_precache[1];
 		R_NewMap();
 		R_DrawFlat_NewMap();
+		CL_SetSolidEntities(); // pmove.physents still point at the models Mod_ClearAll freed
 	}
 
 	CL_ClearTEnts(); /* Not the prettiest, but the safest for now... */
