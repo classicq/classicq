@@ -48,7 +48,5 @@
 #define QW_ARCH "unknown"
 #endif
 
-#define QW_RENDERER "GL"
-
 void CL_Version_f (void);
 char *VersionString (void);
