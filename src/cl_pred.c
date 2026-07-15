@@ -155,58 +155,79 @@ void CL_CalcCrouch (void) {
 static void CL_LerpMove(void)
 {
 	static int last_seq = 0;
-	static double t_prev = 0;
-	static double t_latest = 0;
-	static vec3_t pos_prev;
-	static vec3_t pos_latest;
-	static qboolean teleported;
-	int seq;
-	double phys_interval;
-	double visible_time;
-	float frac;
-	int i;
+	static double lerp_times[3];
+	static vec3_t lerp_origin[3];
+	static qboolean nolerp[2];
+	static qboolean nolerp_next;
+	static double latency = 0.01;
+	qboolean physframe;
+	int seq, from, to, i;
+	double simtime, span;
 
 	seq = (int)cls.netchan.outgoing_sequence;
+	physframe = (seq != last_seq);
 
 	if (seq < last_seq || seq - last_seq > UPDATE_BACKUP / 2) {
 		last_seq = seq;
-		t_prev = 0;
-		t_latest = cls.realtime;
-		VectorCopy(cl.simorg, pos_prev);
-		VectorCopy(cl.simorg, pos_latest);
-		teleported = false;
+		lerp_times[0] = lerp_times[1] = lerp_times[2] = 0;
+		latency = 0.01;
+		nolerp[0] = nolerp[1] = nolerp_next = false;
 		return;
 	}
 
-	if (seq != last_seq) {
-		t_prev = t_latest;
-		VectorCopy(pos_latest, pos_prev);
-		t_latest = cls.realtime;
-		VectorCopy(cl.simorg, pos_latest);
+	if (physframe) {
 		last_seq = seq;
-		teleported = (fabs(pos_latest[0] - pos_prev[0]) > 100
-			|| fabs(pos_latest[1] - pos_prev[1]) > 100
-			|| fabs(pos_latest[2] - pos_prev[2]) > 100);
+
+		lerp_times[2] = lerp_times[1];
+		lerp_times[1] = lerp_times[0];
+		lerp_times[0] = cl.frames[(seq - 1) & UPDATE_MASK].senttime;
+
+		VectorCopy(lerp_origin[1], lerp_origin[2]);
+		VectorCopy(lerp_origin[0], lerp_origin[1]);
+		VectorCopy(cl.simorg, lerp_origin[0]);
+
+		nolerp[1] = nolerp[0];
+		nolerp[0] = nolerp_next;
+		nolerp_next = false;
+
+		for (i = 0; i < 3; i++) {
+			if (fabs(lerp_origin[0][i] - lerp_origin[1][i]) > 100) {
+				nolerp[0] = true;
+				break;
+			}
+		}
 	}
 
-	if (t_prev <= 0)
+	if (lerp_times[2] <= 0)
 		return;
 
-	if (teleported) {
-		VectorCopy(pos_latest, cl.simorg);
-		return;
+	simtime = cls.realtime - latency;
+
+	if (simtime > lerp_times[0])
+		latency = cls.realtime - lerp_times[0];
+	else if (simtime < lerp_times[2])
+		latency = cls.realtime - lerp_times[2];
+	else if (physframe)
+		latency -= min((lerp_times[0] - lerp_times[1]) * 0.005, 0.001);
+
+	if (simtime > lerp_times[1]) {
+		from = 1;
+		to = 0;
+	} else {
+		from = 2;
+		to = 1;
 	}
 
-	phys_interval = t_latest - t_prev;
-	if (phys_interval <= 0)
+	if (nolerp[to])
 		return;
 
-	visible_time = cls.realtime - phys_interval;
-	frac = (visible_time - t_prev) / phys_interval;
-	frac = bound(0, frac, 1);
+	span = lerp_times[to] - lerp_times[from];
+	if (span <= 0)
+		return;
 
 	for (i = 0; i < 3; i++)
-		cl.simorg[i] = pos_prev[i] + (pos_latest[i] - pos_prev[i]) * frac;
+		cl.simorg[i] = lerp_origin[from][i]
+			+ (lerp_origin[to][i] - lerp_origin[from][i]) * bound(0, (simtime - lerp_times[from]) / span, 1);
 }
 #endif
 
