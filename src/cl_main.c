@@ -132,7 +132,7 @@ cvar_t cl_imitate_client = { "cl_imitate_client", "none", 0, cl_imitate_client_c
 cvar_t cl_imitate_os = { "cl_imitate_os", "none", 0, cl_imitate_os_callback };
 
 cvar_t cl_model_bobbing		= {"cl_model_bobbing", "0"};
-cvar_t cl_nolerp			= {"cl_nolerp", "1"};
+cvar_t cl_nolerp			= {"cl_nolerp", "0"};
 
 cvar_t r_rocketlight			= {"r_rocketLight", "1"};
 cvar_t r_rocketlightcolor		= {"r_rocketLightColor", "0"};
