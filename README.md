@@ -2,7 +2,7 @@
 
 # classicQ
 
-A QuakeWorld client for the **30th anniversary of Quake** (June 22, 2026).
+Classic-feel Quake multiplayer (QuakeWorld) with modern renderer.
 
 ![classicq-screenshot.webp](assets/icons/classicq-screenshot.webp)
 
@@ -30,8 +30,6 @@ To be precise: "damaged" is Apple-speak for "nobody paid us the $99/year protect
 
 Binary lands in `assets/` next to the configs. Run from there.
 
-SDL3 is built from source as part of the build. No system dev packages needed, on any platform.
-
 Rendering runs on SDL_GPU: Vulkan or Direct3D 12 on Windows, Vulkan on Linux, Metal on macOS.
 
 ## Credits
@@ -54,4 +52,3 @@ Rendering runs on SDL_GPU: Vulkan or Direct3D 12 on Windows, Vulkan on Linux, Me
 **[ezQuake](https://ezquake.com/)** - reference for modern QuakeWorld compatibility and optimizations. For feature-rich gameplay with modern graphical options, ezQuake is *the* recommended client for most users.
 
 The entire [QuakeWorld community](https://quake.world/) co-created the clients above through code, maps, mods, and graphics. If you feel you've been left out, please create an issue and you'll be added to the credits.
-
