@@ -20,7 +20,7 @@ Within a major:
 ## Procedure
 
 1. Bump version:
-   - `src/version.h` - `CLASSICQ_VERSION`
+   - `internal/engine/version.go` - `CLASSICQ_VERSION`
    - `assets/macos/Info.plist` - `CFBundleVersion` and `CFBundleShortVersionString`
 2. Commit, PR.
 3. Signed tag + push:

@@ -79,3 +79,8 @@ core.*
 assets/classicq.pdb
 
 assets/qw/progs/*.mdl
+
+/classicq
+/classicq.exe
+assets/SDL3.dll
+assets/libSDL3*

@@ -4,21 +4,34 @@ on:
   push:
     branches: [master]
     paths:
-      - 'src/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'shaders.go'
+      - 'src/shaders/compiled/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'build.zig'
       - 'build.zig.zon'
       - 'assets/icons/**'
       - 'assets/macos/**'
       - '.github/workflows/build.yml'
+      - '.github/scripts/**'
   pull_request:
     branches: [master]
     paths:
-      - 'src/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'shaders.go'
+      - 'src/shaders/compiled/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'build.zig'
       - 'build.zig.zon'
       - 'assets/icons/**'
       - 'assets/macos/**'
       - '.github/workflows/build.yml'
+      - '.github/scripts/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +40,42 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CGO_ENABLED: '0'
+
 jobs:
+  check:
+    name: Vet and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l cmd internal shaders.go)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::gofmt wants changes in the files above"
+            exit 1
+          fi
+
+      - name: go vet, every platform
+        run: |
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go vet ./...
+          GOOS=darwin GOARCH=arm64 go vet ./...
+
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          staticcheck ./...
+
   build:
     name: Build ${{ matrix.platform }}
     strategy:
@@ -37,17 +85,30 @@ jobs:
           - os: ubuntu-latest
             platform: linux-amd64
             target: x86_64-linux-gnu
-            artifact: classicq-linux-amd64
-            artifact_path: assets/classicq-linux-amd64
+            goos: linux
+            goarch: amd64
+            binary: classicq-linux-amd64
+            sdl: libSDL3.so.0
+            artifact_path: |
+              assets/classicq-linux-amd64
+              assets/libSDL3.so.0
           - os: ubuntu-latest
             platform: windows-amd64
             target: x86_64-windows-gnu
-            artifact: classicq-windows-amd64.exe
-            artifact_path: assets/classicq-windows-amd64.exe
+            goos: windows
+            goarch: amd64
+            binary: classicq-windows-amd64.exe
+            sdl: SDL3.dll
+            artifact_path: |
+              assets/classicq-windows-amd64.exe
+              assets/SDL3.dll
           - os: macos-latest
             platform: macos-arm64
             target: aarch64-macos
-            artifact: classicq-macos-arm64
+            goos: darwin
+            goarch: arm64
+            binary: classicq-macos-arm64
+            sdl: libSDL3.dylib
             artifact_path: assets/classicq-macos-arm64.app
 
     runs-on: ${{ matrix.os }}
@@ -63,7 +124,7 @@ jobs:
           version: 0.17.0
           cache-key: ${{ matrix.target }}
 
-      - name: Build
+      - name: Build SDL3 shared library
         shell: bash
         run: |
           BUILD_ARGS="-Drelease=true -Dcpu=baseline"
@@ -71,24 +132,76 @@ jobs:
             BUILD_ARGS="-Dtarget=${{ matrix.target }} $BUILD_ARGS"
           fi
           for i in 1 2 3; do
-            zig build $BUILD_ARGS && break || {
-              echo "::warning::Build attempt $i failed"
+            zig build sdl-shared $BUILD_ARGS && break || {
+              echo "::warning::SDL3 build attempt $i failed"
               [ $i -eq 3 ] && exit 1
               rm -rf .zig-cache
               sleep 2
             }
           done
+          ls -l "assets/${{ matrix.sdl }}"
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build classicQ
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          LDFLAGS="-s -w"
+          if [ "$GOOS" = "windows" ]; then
+            LDFLAGS="$LDFLAGS -H windowsgui"
+          fi
+          go build -trimpath -ldflags "$LDFLAGS" -o "assets/${{ matrix.binary }}" ./cmd/classicq
+
+      - name: Assemble app bundle
+        if: matrix.goos == 'darwin'
+        run: |
+          APP=assets/classicq-macos-arm64.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          mv assets/classicq-macos-arm64 assets/libSDL3.dylib "$APP/Contents/MacOS/"
+          cp assets/macos/Info.plist "$APP/Contents/"
+          cp assets/icons/classicq.icns "$APP/Contents/Resources/"
 
       - name: Smoke test
-        if: matrix.target == 'x86_64-linux-gnu'
+        if: matrix.platform == 'linux-amd64'
         run: |
-          file assets/classicq-linux-amd64
+          file assets/classicq-linux-amd64 assets/libSDL3.so.0
           ldd assets/classicq-linux-amd64 || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.binary }}
           path: ${{ matrix.artifact_path }}
+          retention-days: 7
+          if-no-files-found: error
+
+  package:
+    name: Package test builds
+    needs: build
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+
+      - name: Assemble per-OS ZIPs
+        run: bash .github/scripts/package.sh "dev-$(git rev-parse --short HEAD)"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: classicQ-packages
+          path: classicQ-*.zip
           retention-days: 7
           if-no-files-found: error
