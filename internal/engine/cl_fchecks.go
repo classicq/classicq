@@ -3,7 +3,7 @@ package engine
 // cl_fchecks.c: answers to the f_version, f_skins, f_modified, f_server and
 // f_ruleset requests in chat
 
-var f_ruleset_reply_time, f_reply_time, f_mod_reply_time, f_version_reply_time, f_skins_reply_time, f_server_reply_time float32
+var f_ruleset_reply_time, f_mod_reply_time, f_version_reply_time, f_skins_reply_time, f_server_reply_time float32
 
 func FChecks_VersionResponse() {
 	Cbuf_AddText(va("say %s %s:"+QW_ARCH+"\n", fversion_clientnames[imitatedclientnum], fversion_osnames[imitatedosnum]))
@@ -98,17 +98,11 @@ func FChecks_CheckFRulesetRequest(s string) bool {
 }
 
 func FChecks_CheckRequest(s string) {
-	fcheck := false
-
-	// every check runs, |= does not short-circuit
-	fcheck = FChecks_VersionRequest(s) || fcheck
-	fcheck = FChecks_SkinRequest(s) || fcheck
-	fcheck = FChecks_CheckFModRequest(s) || fcheck
-	fcheck = FChecks_CheckFServerRequest(s) || fcheck
-	fcheck = FChecks_CheckFRulesetRequest(s) || fcheck
-	if fcheck {
-		f_reply_time = float32(cls.realtime)
-	}
+	FChecks_VersionRequest(s)
+	FChecks_SkinRequest(s)
+	FChecks_CheckFModRequest(s)
+	FChecks_CheckFServerRequest(s)
+	FChecks_CheckFRulesetRequest(s)
 }
 
 func FChecks_CvarInit() {

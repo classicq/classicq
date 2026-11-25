@@ -85,9 +85,6 @@ func FS_CreatePath(path string) {
 	}
 }
 
-var file_from_pak int // global indicating file came from pack file ZOID
-var file_from_gamedir int
-
 func pakfileCompare(p packfile, name string) int {
 	return strings.Compare(p.name, name)
 }
@@ -96,16 +93,11 @@ func pakfileCompare(p packfile, name string) int {
 // Sets com_filesize, com_netpath and returns the open file positioned at the
 // data, or nil and -1.
 func FS_FOpenFile(filename string) (*os.File, int) {
-	file_from_pak = 0
-	file_from_gamedir = 1
 	com_filesize = -1
 	com_netpath = ""
 
 	// search through the path, one element at a time
 	for search := com_searchpaths; search != nil; search = search.next {
-		if search == com_base_searchpaths && com_searchpaths != com_base_searchpaths {
-			file_from_gamedir = 0
-		}
 
 		// is the element a pak file?
 		if search.pack != nil {
@@ -123,7 +115,6 @@ func FS_FOpenFile(filename string) (*os.File, int) {
 				}
 				f.Seek(int64(pakfile.filepos), io.SeekStart)
 				com_filesize = int(pakfile.filelen)
-				file_from_pak = 1
 				com_netpath = strlcpy(fmt.Sprintf("%s#%d", pak.filename, i), MAX_OSPATH)
 				return f, com_filesize
 			}
