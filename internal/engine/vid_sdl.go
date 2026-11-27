@@ -357,7 +357,7 @@ func Sys_Video_Open(mode string, width, height uint, fullscreen int, palette []b
 	sdl.ShowWindow(d.window)
 
 	if runtime.GOOS != "windows" {
-		// Windows .ico embedded via RC; other platforms get PNG fallback
+		// Windows takes the icon from the exe resource; other platforms get the PNG
 		var icon_w, icon_h uint
 		icon_pixels := Image_LoadPNG(nil, "icons/256.png", 0, 0, &icon_w, &icon_h)
 		if icon_pixels != nil {

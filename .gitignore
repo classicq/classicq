@@ -82,5 +82,6 @@ assets/qw/progs/*.mdl
 
 /classicq
 /classicq.exe
+*.syso
 assets/SDL3.dll
 assets/libSDL3*
