@@ -8,7 +8,7 @@ import (
 // version.h
 const (
 	QW_VERSION       = 2.40
-	CLASSICQ_VERSION = "3.5.0"
+	CLASSICQ_VERSION = "3.6.0"
 )
 
 var QW_PLATFORM = map[string]string{
