@@ -1273,7 +1273,7 @@ var video_verify_oldactive_height uint
 var video_verify_oldactive_fullscreen bool
 var video_verify_oldactive_mode string
 
-var video_selectedmodeline string // "" is the NULL of C
+var video_selectedmodeline string // "" is C's null pointer
 
 var video_verify_fail_time float64
 

@@ -9,7 +9,7 @@ rm -rf assets-base
 mkdir -p assets-base
 cp -r assets/. assets-base/
 rm -f assets-base/classicq-windows-amd64.exe assets-base/classicq-linux-amd64 assets-base/classicq-macos-arm64
-rm -f assets-base/classicq-go-* assets-base/classicq.pdb assets-base/SDL3.dll assets-base/libSDL3*
+rm -f assets-base/classicq.pdb assets-base/SDL3.dll assets-base/libSDL3*
 rm -rf assets-base/classicq-macos-arm64.app
 cp LICENSE README.md assets-base/
 

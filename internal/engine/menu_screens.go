@@ -88,7 +88,7 @@ const (
 
 type direntry_t struct {
 	type_ direntry_type_t
-	name  string // "" is the NULL of C
+	name  string // "" is C's null pointer
 	size  int
 	time  time.Time
 }
