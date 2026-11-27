@@ -163,6 +163,24 @@ pub fn build(b: *std.Build) void {
     run_cmd.addPassthruArgs();
     const run_step = b.step("run", "Run classicQ");
     run_step.dependOn(&run_cmd.step);
+
+    // Shared SDL3 for the Go client, built from the same package as the static one above.
+    const sdl_shared_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_linkage = .dynamic,
+    });
+    const sdl_shared = sdl_shared_dep.artifact("SDL3");
+    const sdl_shared_name: []const u8 = switch (os_tag) {
+        .windows => "assets/SDL3.dll",
+        .linux => "assets/libSDL3.so.0",
+        .macos => "assets/libSDL3.dylib",
+        else => "assets/libSDL3.so",
+    };
+    const copy_sdl_shared = b.addUpdateSourceFiles();
+    copy_sdl_shared.addCopyFileToSource(sdl_shared.getEmittedBin(), sdl_shared_name);
+    const sdl_shared_step = b.step("sdl-shared", "Build SDL3 as a shared library into assets/ for the Go client");
+    sdl_shared_step.dependOn(&copy_sdl_shared.step);
 }
 
 const common_sources = [_][]const u8{

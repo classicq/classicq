@@ -1,0 +1,158 @@
+// Copyright (C) 2026 classicQ contributors
+//
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//
+// See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+// SDL 3.4.12 bindings, generated from the headers and kept by hand since.
+
+package sdl
+
+const (
+	SDLK_BACKSPACE                        Keycode                 = 8
+	SDLK_CAPSLOCK                         Keycode                 = 0x40000039
+	SDLK_DELETE                           Keycode                 = 127
+	SDLK_DOWN                             Keycode                 = 0x40000051
+	SDLK_END                              Keycode                 = 0x4000004d
+	SDLK_ESCAPE                           Keycode                 = 27
+	SDLK_F1                               Keycode                 = 0x4000003a
+	SDLK_F10                              Keycode                 = 0x40000043
+	SDLK_F11                              Keycode                 = 0x40000044
+	SDLK_F12                              Keycode                 = 0x40000045
+	SDLK_F2                               Keycode                 = 0x4000003b
+	SDLK_F3                               Keycode                 = 0x4000003c
+	SDLK_F4                               Keycode                 = 0x4000003d
+	SDLK_F5                               Keycode                 = 0x4000003e
+	SDLK_F6                               Keycode                 = 0x4000003f
+	SDLK_F7                               Keycode                 = 0x40000040
+	SDLK_F8                               Keycode                 = 0x40000041
+	SDLK_F9                               Keycode                 = 0x40000042
+	SDLK_HOME                             Keycode                 = 0x4000004a
+	SDLK_INSERT                           Keycode                 = 0x40000049
+	SDLK_KP_0                             Keycode                 = 0x40000062
+	SDLK_KP_1                             Keycode                 = 0x40000059
+	SDLK_KP_2                             Keycode                 = 0x4000005a
+	SDLK_KP_3                             Keycode                 = 0x4000005b
+	SDLK_KP_4                             Keycode                 = 0x4000005c
+	SDLK_KP_5                             Keycode                 = 0x4000005d
+	SDLK_KP_6                             Keycode                 = 0x4000005e
+	SDLK_KP_7                             Keycode                 = 0x4000005f
+	SDLK_KP_8                             Keycode                 = 0x40000060
+	SDLK_KP_9                             Keycode                 = 0x40000061
+	SDLK_KP_DIVIDE                        Keycode                 = 0x40000054
+	SDLK_KP_ENTER                         Keycode                 = 0x40000058
+	SDLK_KP_MINUS                         Keycode                 = 0x40000056
+	SDLK_KP_MULTIPLY                      Keycode                 = 0x40000055
+	SDLK_KP_PERIOD                        Keycode                 = 0x40000063
+	SDLK_KP_PLUS                          Keycode                 = 0x40000057
+	SDLK_LALT                             Keycode                 = 0x400000e2
+	SDLK_LCTRL                            Keycode                 = 0x400000e0
+	SDLK_LEFT                             Keycode                 = 0x40000050
+	SDLK_LGUI                             Keycode                 = 0x400000e3
+	SDLK_LSHIFT                           Keycode                 = 0x400000e1
+	SDLK_MENU                             Keycode                 = 0x40000076
+	SDLK_NUMLOCKCLEAR                     Keycode                 = 0x40000053
+	SDLK_PAGEDOWN                         Keycode                 = 0x4000004e
+	SDLK_PAGEUP                           Keycode                 = 0x4000004b
+	SDLK_PAUSE                            Keycode                 = 0x40000048
+	SDLK_PRINTSCREEN                      Keycode                 = 0x40000046
+	SDLK_RALT                             Keycode                 = 0x400000e6
+	SDLK_RCTRL                            Keycode                 = 0x400000e4
+	SDLK_RETURN                           Keycode                 = 13
+	SDLK_RGUI                             Keycode                 = 0x400000e7
+	SDLK_RIGHT                            Keycode                 = 0x4000004f
+	SDLK_RSHIFT                           Keycode                 = 0x400000e5
+	SDLK_SCROLLLOCK                       Keycode                 = 0x40000047
+	SDLK_SPACE                            Keycode                 = 32
+	SDLK_TAB                              Keycode                 = 9
+	SDLK_UP                               Keycode                 = 0x40000052
+	AUDIO_DEVICE_DEFAULT_PLAYBACK         AudioDeviceID           = 0xffffffff
+	AUDIO_S16                             AudioFormat             = 0x8010
+	BUTTON_LEFT                                                   = 1
+	BUTTON_MIDDLE                                                 = 2
+	BUTTON_RIGHT                                                  = 3
+	BUTTON_X1                                                     = 4
+	BUTTON_X2                                                     = 5
+	EVENT_KEY_DOWN                        EventType               = 0x300
+	EVENT_KEY_UP                          EventType               = 0x301
+	EVENT_MOUSE_BUTTON_DOWN               EventType               = 0x401
+	EVENT_MOUSE_BUTTON_UP                 EventType               = 0x402
+	EVENT_MOUSE_MOTION                    EventType               = 0x400
+	EVENT_MOUSE_WHEEL                     EventType               = 0x403
+	EVENT_QUIT                            EventType               = 0x100
+	EVENT_WINDOW_FOCUS_GAINED             EventType               = 0x20e
+	EVENT_WINDOW_FOCUS_LOST               EventType               = 0x20f
+	EVENT_WINDOW_PIXEL_SIZE_CHANGED       EventType               = 0x207
+	EVENT_WINDOW_RESIZED                  EventType               = 0x206
+	GPU_BLENDFACTOR_DST_COLOR             GPUBlendFactor          = 5
+	GPU_BLENDFACTOR_ONE                   GPUBlendFactor          = 2
+	GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA   GPUBlendFactor          = 8
+	GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR   GPUBlendFactor          = 4
+	GPU_BLENDFACTOR_SRC_ALPHA             GPUBlendFactor          = 7
+	GPU_BLENDFACTOR_SRC_COLOR             GPUBlendFactor          = 3
+	GPU_BLENDFACTOR_ZERO                  GPUBlendFactor          = 1
+	GPU_BLENDOP_ADD                       GPUBlendOp              = 1
+	GPU_BUFFERUSAGE_INDEX                 GPUBufferUsageFlags     = 2
+	GPU_BUFFERUSAGE_VERTEX                GPUBufferUsageFlags     = 1
+	GPU_COMPAREOP_LESS_OR_EQUAL           GPUCompareOp            = 4
+	GPU_CULLMODE_FRONT                    GPUCullMode             = 1
+	GPU_CULLMODE_NONE                     GPUCullMode             = 0
+	GPU_FILLMODE_FILL                     GPUFillMode             = 0
+	GPU_FILTER_LINEAR                     GPUFilter               = 1
+	GPU_FILTER_NEAREST                    GPUFilter               = 0
+	GPU_FRONTFACE_COUNTER_CLOCKWISE       GPUFrontFace            = 0
+	GPU_INDEXELEMENTSIZE_32BIT            GPUIndexElementSize     = 1
+	GPU_LOADOP_CLEAR                      GPULoadOp               = 1
+	GPU_LOADOP_DONT_CARE                  GPULoadOp               = 2
+	GPU_PRESENTMODE_IMMEDIATE             GPUPresentMode          = 1
+	GPU_PRESENTMODE_MAILBOX               GPUPresentMode          = 2
+	GPU_PRESENTMODE_VSYNC                 GPUPresentMode          = 0
+	GPU_PRIMITIVETYPE_TRIANGLELIST        GPUPrimitiveType        = 0
+	GPU_SAMPLECOUNT_1                     GPUSampleCount          = 0
+	GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE  GPUSamplerAddressMode   = 2
+	GPU_SAMPLERADDRESSMODE_REPEAT         GPUSamplerAddressMode   = 0
+	GPU_SAMPLERMIPMAPMODE_LINEAR          GPUSamplerMipmapMode    = 1
+	GPU_SAMPLERMIPMAPMODE_NEAREST         GPUSamplerMipmapMode    = 0
+	GPU_SHADERFORMAT_DXIL                 GPUShaderFormat         = 8
+	GPU_SHADERFORMAT_MSL                  GPUShaderFormat         = 16
+	GPU_SHADERFORMAT_SPIRV                GPUShaderFormat         = 2
+	GPU_SHADERSTAGE_FRAGMENT              GPUShaderStage          = 1
+	GPU_SHADERSTAGE_VERTEX                GPUShaderStage          = 0
+	GPU_STOREOP_DONT_CARE                 GPUStoreOp              = 1
+	GPU_STOREOP_STORE                     GPUStoreOp              = 0
+	GPU_SWAPCHAINCOMPOSITION_SDR          GPUSwapchainComposition = 0
+	GPU_TEXTUREFORMAT_D24_UNORM           GPUTextureFormat        = 59
+	GPU_TEXTUREFORMAT_D32_FLOAT           GPUTextureFormat        = 60
+	GPU_TEXTUREFORMAT_R8G8B8A8_UNORM      GPUTextureFormat        = 4
+	GPU_TEXTURETYPE_2D                    GPUTextureType          = 0
+	GPU_TEXTUREUSAGE_COLOR_TARGET         GPUTextureUsageFlags    = 2
+	GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET GPUTextureUsageFlags    = 4
+	GPU_TEXTUREUSAGE_SAMPLER              GPUTextureUsageFlags    = 1
+	GPU_TRANSFERBUFFERUSAGE_DOWNLOAD      GPUTransferBufferUsage  = 1
+	GPU_TRANSFERBUFFERUSAGE_UPLOAD        GPUTransferBufferUsage  = 0
+	GPU_VERTEXELEMENTFORMAT_FLOAT2        GPUVertexElementFormat  = 10
+	GPU_VERTEXELEMENTFORMAT_FLOAT3        GPUVertexElementFormat  = 11
+	GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM   GPUVertexElementFormat  = 20
+	GPU_VERTEXINPUTRATE_VERTEX            GPUVertexInputRate      = 0
+	INIT_AUDIO                            InitFlags               = 16
+	INIT_VIDEO                            InitFlags               = 32
+	MESSAGEBOX_ERROR                      MessageBoxFlags         = 16
+	PIXELFORMAT_RGBA32                    PixelFormat             = 0x16762004
+	SCANCODE_GRAVE                        Scancode                = 53
+	WINDOWPOS_CENTERED                                            = 0x2fff0000
+	WINDOW_FULLSCREEN                     WindowFlags             = 1
+	WINDOW_HIDDEN                         WindowFlags             = 8
+	WINDOW_HIGH_PIXEL_DENSITY             WindowFlags             = 0x2000
+	WINDOW_RESIZABLE                      WindowFlags             = 32
+)

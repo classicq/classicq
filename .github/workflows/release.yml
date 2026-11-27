@@ -9,6 +9,9 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  CGO_ENABLED: '0'
+
 jobs:
   verify-tag:
     name: Verify tag is on master
@@ -36,17 +39,30 @@ jobs:
           - os: ubuntu-latest
             platform: linux-amd64
             target: x86_64-linux-gnu
-            artifact: classicq-linux-amd64
-            artifact_path: assets/classicq-linux-amd64
+            goos: linux
+            goarch: amd64
+            binary: classicq-linux-amd64
+            sdl: libSDL3.so.0
+            artifact_path: |
+              assets/classicq-linux-amd64
+              assets/libSDL3.so.0
           - os: ubuntu-latest
             platform: windows-amd64
             target: x86_64-windows-gnu
-            artifact: classicq-windows-amd64.exe
-            artifact_path: assets/classicq-windows-amd64.exe
+            goos: windows
+            goarch: amd64
+            binary: classicq-windows-amd64.exe
+            sdl: SDL3.dll
+            artifact_path: |
+              assets/classicq-windows-amd64.exe
+              assets/SDL3.dll
           - os: macos-latest
             platform: macos-arm64
             target: aarch64-macos
-            artifact: classicq-macos-arm64
+            goos: darwin
+            goarch: arm64
+            binary: classicq-macos-arm64
+            sdl: libSDL3.dylib
             artifact_path: assets/classicq-macos-arm64.app
 
     runs-on: ${{ matrix.os }}
@@ -61,7 +77,7 @@ jobs:
           version: 0.17.0
           cache-key: ${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build SDL3 shared library
         shell: bash
         run: |
           BUILD_ARGS="-Drelease=true -Dcpu=baseline"
@@ -69,18 +85,48 @@ jobs:
             BUILD_ARGS="-Dtarget=${{ matrix.target }} $BUILD_ARGS"
           fi
           for i in 1 2 3; do
-            zig build $BUILD_ARGS && break || {
-              echo "::warning::Build attempt $i failed"
+            zig build sdl-shared $BUILD_ARGS && break || {
+              echo "::warning::SDL3 build attempt $i failed"
               [ $i -eq 3 ] && exit 1
               rm -rf .zig-cache
               sleep 2
             }
           done
+          ls -l "assets/${{ matrix.sdl }}"
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Windows icon
+        if: matrix.goos == 'windows'
+        run: go run github.com/akavel/rsrc@v0.10.2 -ico assets/icons/classicq.ico -arch amd64 -o cmd/classicq/rsrc_windows_amd64.syso
+
+      - name: Build release binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          LDFLAGS="-s -w"
+          if [ "$GOOS" = "windows" ]; then
+            LDFLAGS="$LDFLAGS -H windowsgui"
+          fi
+          go build -trimpath -ldflags "$LDFLAGS" -o "assets/${{ matrix.binary }}" ./cmd/classicq
+
+      - name: Assemble app bundle
+        if: matrix.goos == 'darwin'
+        run: |
+          APP=assets/classicq-macos-arm64.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          mv assets/classicq-macos-arm64 assets/libSDL3.dylib "$APP/Contents/MacOS/"
+          cp assets/macos/Info.plist "$APP/Contents/"
+          cp assets/icons/classicq.icns "$APP/Contents/Resources/"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.binary }}
           path: ${{ matrix.artifact_path }}
           retention-days: 1
           if-no-files-found: error
@@ -117,45 +163,7 @@ jobs:
           fi
 
       - name: Assemble per-OS ZIPs
-        run: |
-          VER=${{ steps.version.outputs.VERSION }}
-
-          mkdir -p assets-base
-          cp -r assets/. assets-base/
-          rm -f assets-base/classicq-windows-amd64.exe
-          rm -f assets-base/classicq-linux-amd64
-          rm -rf assets-base/classicq-macos-arm64.app
-          cp LICENSE assets-base/
-          cp README.md assets-base/
-
-          # Windows ZIP
-          PLATFORM="windows-amd64"
-          BIN="classicq-windows-amd64.exe"
-          STAGE="classicQ-${VER}-${PLATFORM}"
-          mkdir -p "$STAGE"
-          cp -r assets-base/* "$STAGE/"
-          cp "artifacts/${BIN}/${BIN}" "$STAGE/"
-          zip -r "${STAGE}.zip" "$STAGE"
-
-          # Linux ZIP
-          PLATFORM="linux-amd64"
-          BIN="classicq-linux-amd64"
-          STAGE="classicQ-${VER}-${PLATFORM}"
-          mkdir -p "$STAGE"
-          cp -r assets-base/* "$STAGE/"
-          cp "artifacts/${BIN}/${BIN}" "$STAGE/"
-          chmod +x "$STAGE/${BIN}"
-          zip -r "${STAGE}.zip" "$STAGE"
-
-          # macOS ZIP - preserve .app bundle
-          PLATFORM="macos-arm64"
-          STAGE="classicQ-${VER}-${PLATFORM}"
-          APP="$STAGE/classicq-macos-arm64.app"
-          mkdir -p "$STAGE" "$APP"
-          cp -r assets-base/* "$STAGE/"
-          cp -r artifacts/classicq-macos-arm64/. "$APP/"
-          chmod +x "$APP/Contents/MacOS/classicq-macos-arm64"
-          zip -ry "${STAGE}.zip" "$STAGE"
+        run: bash .github/scripts/package.sh "${{ steps.version.outputs.VERSION }}"
 
       - name: Generate SHA256 checksums
         run: |

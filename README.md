@@ -24,9 +24,10 @@ To be precise: "damaged" is Apple-speak for "nobody paid us the $99/year protect
 
 ## Build from source
 
-1. Install [Zig](https://ziglang.org/download/).
+1. Install [Go](https://go.dev/dl/).
 2. Clone the repo.
-3. Run `zig build`.
+3. Run `go build -ldflags -H=windowsgui -o assets/classicq-windows-amd64.exe ./cmd/classicq` on Windows, `go build -o assets/classicq-linux-amd64 ./cmd/classicq` on Linux or `-o assets/classicq-macos-arm64` on macOS.
+4. Put the SDL3 shared library next to the binary as `SDL3.dll`, `libSDL3.so.0` or `libSDL3.dylib`, from the [SDL releases](https://github.com/libsdl-org/SDL/releases) or your package manager. `CLASSICQ_SDL3_PATH` points at it anywhere else.
 
 Binary lands in `assets/` next to the configs. Run from there.
 
